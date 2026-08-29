@@ -38,7 +38,12 @@ public class WalletFundingService {
     public PaymentResponse initialize(UUID userId, InitializePaymentRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
         BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
+        if (amount.signum() <= 0) {
+            throw new IllegalArgumentException("Amount must be greater than zero");
+        }
+
         String reference = "WT_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
 
         WalletTransaction tx = new WalletTransaction();
@@ -57,9 +62,19 @@ public class WalletFundingService {
             throw new IllegalStateException("Paystack initialization failed");
         }
 
-        String authorizationUrl = String.valueOf(data.get("authorization_url"));
-        return new PaymentResponse(reference, amount, "PENDING", authorizationUrl,
-                walletRepository.findByUserId(userId).map(Wallet::getBalance).orElse(BigDecimal.ZERO));
+        String authorizationUrl = stringValue(data.get("authorization_url"));
+        String accessCode = stringValue(data.get("access_code"));
+        if (accessCode == null || accessCode.isBlank()) {
+            tx.setStatus(WalletTransaction.Status.FAILED);
+            transactionRepository.save(tx);
+            throw new IllegalStateException("Paystack did not return an access code");
+        }
+
+        BigDecimal balance = walletRepository.findByUserId(userId)
+                .map(Wallet::getBalance)
+                .orElse(BigDecimal.ZERO);
+
+        return new PaymentResponse(reference, amount, "PENDING", authorizationUrl, accessCode, balance);
     }
 
     @Transactional
@@ -74,7 +89,7 @@ public class WalletFundingService {
         if (tx.getStatus() == WalletTransaction.Status.SUCCESS) {
             Wallet wallet = walletRepository.findByUserId(userId)
                     .orElseThrow(() -> new IllegalStateException("Wallet not found"));
-            return new PaymentResponse(reference, tx.getAmount(), "SUCCESS", null, wallet.getBalance());
+            return new PaymentResponse(reference, tx.getAmount(), "SUCCESS", null, null, wallet.getBalance());
         }
 
         Map<String, Object> result = paystackService.verify(reference);
@@ -87,6 +102,7 @@ public class WalletFundingService {
         long verifiedKobo = numberValue(data.get("amount"));
         long expectedKobo = tx.getAmount().movePointRight(2).longValueExact();
 
+        // Value is delivered only when Paystack confirms success and the amount matches exactly.
         if (!"success".equalsIgnoreCase(status) || verifiedKobo != expectedKobo) {
             tx.setStatus(WalletTransaction.Status.FAILED);
             transactionRepository.save(tx);
@@ -103,7 +119,12 @@ public class WalletFundingService {
         tx.setCompletedAt(Instant.now());
         transactionRepository.save(tx);
 
-        return new PaymentResponse(reference, tx.getAmount(), "SUCCESS", null, wallet.getBalance());
+        return new PaymentResponse(reference, tx.getAmount(), "SUCCESS", null, null, wallet.getBalance());
+    }
+
+    private String stringValue(Object value) {
+        if (value == null) return null;
+        return String.valueOf(value);
     }
 
     private long numberValue(Object value) {
