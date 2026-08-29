@@ -1,6 +1,5 @@
 package com.wavetransakt.dto;
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -8,11 +7,15 @@ public final class AuthRequests {
     private AuthRequests() {}
 
     public record RegisterRequest(
-            @NotBlank @Email String email,
+            @NotBlank @Size(max = 60) String firstName,
+            @NotBlank @Size(max = 60) String lastName,
+            @NotBlank String email,
             @NotBlank @Size(min = 8, max = 128) String password,
-            @NotBlank @Size(max = 120) String fullName) {}
+            String phone,
+            String bvn,
+            String nin) {}
 
     public record LoginRequest(
-            @NotBlank @Email String email,
+            @NotBlank String identifier,
             @NotBlank @Size(min = 8, max = 128) String password) {}
 }
