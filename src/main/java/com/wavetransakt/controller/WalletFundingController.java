@@ -5,6 +5,8 @@ import com.wavetransakt.dto.PaymentResponse;
 import com.wavetransakt.service.WalletFundingService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -18,18 +20,19 @@ public class WalletFundingController {
         this.fundingService = fundingService;
     }
 
-    // Temporary user header until Wave Transakt JWT authentication is wired in.
     @PostMapping("/initialize")
     public ResponseEntity<PaymentResponse> initialize(
-            @RequestHeader("X-User-Id") UUID userId,
+            @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody InitializePaymentRequest request) {
+        UUID userId = UUID.fromString(jwt.getSubject());
         return ResponseEntity.ok(fundingService.initialize(userId, request));
     }
 
     @GetMapping("/verify/{reference}")
     public ResponseEntity<PaymentResponse> verify(
-            @RequestHeader("X-User-Id") UUID userId,
+            @AuthenticationPrincipal Jwt jwt,
             @PathVariable String reference) {
+        UUID userId = UUID.fromString(jwt.getSubject());
         return ResponseEntity.ok(fundingService.verify(userId, reference));
     }
 }
