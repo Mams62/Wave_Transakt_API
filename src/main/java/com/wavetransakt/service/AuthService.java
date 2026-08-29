@@ -41,7 +41,7 @@ public class AuthService {
 
         User user = new User();
         user.setEmail(email);
-        user.setFullName(request.fullName().trim());
+        user.setFullName((request.firstName().trim() + " " + request.lastName().trim()).trim());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setWalletNumber(generateWalletNumber());
         user = users.save(user);
@@ -54,7 +54,8 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
-        User user = users.findByEmailIgnoreCase(request.email().trim().toLowerCase())
+        String identifier = request.identifier().trim().toLowerCase();
+        User user = users.findByEmailIgnoreCase(identifier)
                 .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new BadCredentialsException("Invalid email or password");
