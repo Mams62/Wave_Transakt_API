@@ -1,47 +1,36 @@
 package com.wavetransakt.controller;
 
 import com.wavetransakt.model.User;
-import com.wavetransakt.model.Wallet;
-import com.wavetransakt.repository.UserRepository;
-import com.wavetransakt.repository.WalletRepository;
+import com.wavetransakt.service.AuthService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/users")
 public class UserController {
-    private final UserRepository userRepository;
-    private final WalletRepository walletRepository;
+    private final AuthService authService;
 
-    public UserController(UserRepository userRepository, WalletRepository walletRepository) {
-        this.userRepository = userRepository;
-        this.walletRepository = walletRepository;
-    }
-
-    @PostMapping
-    public ResponseEntity<User> create(@RequestBody CreateUserRequest request) {
-        if (userRepository.findByEmail(request.email()).isPresent()) {
-            return ResponseEntity.badRequest().build();
-        }
-        User user = new User();
-        user.setEmail(request.email());
-        user.setFullName(request.fullName());
-        user.setWalletNumber("9" + String.format("%09d", System.nanoTime() % 1_000_000_000L));
-        user = userRepository.save(user);
-
-        Wallet wallet = new Wallet();
-        wallet.setUser(user);
-        walletRepository.save(wallet);
-        return ResponseEntity.ok(user);
+    public UserController(AuthService authService) {
+        this.authService = authService;
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<User> get(@PathVariable UUID id) {
-        return userRepository.findById(id).map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+    public ResponseEntity<?> get(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        UUID authenticatedId = UUID.fromString(jwt.getSubject());
+        if (!authenticatedId.equals(id)) {
+            return ResponseEntity.status(403).body(Map.of("message", "You are not allowed to access this account"));
+        }
+        User user = authService.findAuthenticatedUser(authenticatedId);
+        return ResponseEntity.ok(Map.of(
+                "id", user.getId(),
+                "email", user.getEmail(),
+                "fullName", user.getFullName(),
+                "walletNumber", user.getWalletNumber()
+        ));
     }
-
-    public record CreateUserRequest(String email, String fullName) {}
 }
