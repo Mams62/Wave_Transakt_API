@@ -3,7 +3,9 @@ package com.wavetransakt.service;
 import com.wavetransakt.dto.AuthRequests.LoginRequest;
 import com.wavetransakt.dto.AuthRequests.RegisterRequest;
 import com.wavetransakt.model.User;
+import com.wavetransakt.model.Wallet;
 import com.wavetransakt.repository.UserRepository;
+import com.wavetransakt.repository.WalletRepository;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -19,11 +21,13 @@ import java.util.UUID;
 @Service
 public class AuthService {
     private final UserRepository users;
+    private final WalletRepository wallets;
     private final PasswordEncoder passwordEncoder;
     private final JwtEncoder jwtEncoder;
 
-    public AuthService(UserRepository users, PasswordEncoder passwordEncoder, JwtEncoder jwtEncoder) {
+    public AuthService(UserRepository users, WalletRepository wallets, PasswordEncoder passwordEncoder, JwtEncoder jwtEncoder) {
         this.users = users;
+        this.wallets = wallets;
         this.passwordEncoder = passwordEncoder;
         this.jwtEncoder = jwtEncoder;
     }
@@ -40,7 +44,12 @@ public class AuthService {
         user.setFullName(request.fullName().trim());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setWalletNumber(generateWalletNumber());
-        users.save(user);
+        user = users.save(user);
+
+        Wallet wallet = new Wallet();
+        wallet.setUser(user);
+        wallets.save(wallet);
+
         return new AuthResponse("Registration successful", createToken(user));
     }
 
