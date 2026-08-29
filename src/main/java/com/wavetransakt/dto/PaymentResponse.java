@@ -7,5 +7,6 @@ public record PaymentResponse(
         BigDecimal amount,
         String status,
         String authorizationUrl,
+        String accessCode,
         BigDecimal walletBalance
 ) {}
