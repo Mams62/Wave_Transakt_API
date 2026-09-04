@@ -20,7 +20,9 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http
+    ) throws Exception {
 
         http
                 .csrf(csrf -> csrf.disable())
@@ -33,30 +35,29 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
 
-                        // ==============================
-                        // PUBLIC ENDPOINTS
-                        // ==============================
-
                         .requestMatchers(
                                 "/",
                                 "/error",
                                 "/api/health"
                         ).permitAll()
 
-                        // Authentication
+                        // Must require authentication.
                         .requestMatchers(
-                                "/api/auth/**"
+                                "/api/auth/me"
+                        ).authenticated()
+
+                        // Public authentication routes.
+                        .requestMatchers(
+                                "/api/auth/register",
+                                "/api/auth/login"
                         ).permitAll()
 
-                        // Verification
+                        // Email verification remains public.
                         .requestMatchers(
                                 "/api/verification/**"
                         ).permitAll()
 
-                        // ==============================
-                        // PROTECTED ENDPOINTS
-                        // ==============================
-
+                        // All remaining endpoints require JWT.
                         .anyRequest().authenticated()
                 )
 
