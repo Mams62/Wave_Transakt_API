@@ -1,0 +1,2 @@
+ALTER TABLE wallet_transactions
+    ADD COLUMN status VARCHAR(30) NOT NULL DEFAULT 'PENDING';

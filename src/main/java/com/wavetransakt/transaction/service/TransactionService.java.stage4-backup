@@ -1,0 +1,172 @@
+package com.wavetransakt.transaction.service;
+
+import com.wavetransakt.transaction.dto.TransactionResponse;
+import com.wavetransakt.transaction.dto.TransferRequest;
+import com.wavetransakt.transaction.entity.Transaction;
+import com.wavetransakt.transaction.entity.TransactionStatus;
+import com.wavetransakt.transaction.entity.TransactionType;
+import com.wavetransakt.transaction.repository.TransactionRepository;
+import com.wavetransakt.wallet.entity.Wallet;
+import com.wavetransakt.wallet.repository.WalletRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+
+@Service
+@RequiredArgsConstructor
+public class TransactionService {
+
+    private final TransactionRepository transactionRepository;
+    private final WalletRepository walletRepository;
+
+    @Transactional
+    public TransactionResponse transfer(
+            UUID senderUserId,
+            TransferRequest request
+    ) {
+
+        Wallet sender = walletRepository
+                .findByUserId(senderUserId)
+                .orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "Sender wallet not found"
+                        )
+                );
+
+        Wallet receiver = walletRepository
+                .findByWalletNumber(
+                        request.getReceiverWalletNumber()
+                )
+                .orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "Receiver wallet not found"
+                        )
+                );
+
+        if (sender.getId().equals(receiver.getId())) {
+            throw new IllegalArgumentException(
+                    "You cannot transfer money to your own wallet"
+            );
+        }
+
+        if (sender.getStatus() == null ||
+                !sender.getStatus().name().equals("ACTIVE")) {
+
+            throw new IllegalArgumentException(
+                    "Sender wallet is not active"
+            );
+        }
+
+        if (receiver.getStatus() == null ||
+                !receiver.getStatus().name().equals("ACTIVE")) {
+
+            throw new IllegalArgumentException(
+                    "Receiver wallet is not active"
+            );
+        }
+
+        BigDecimal amount = request.getAmount();
+
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException(
+                    "Transfer amount must be greater than zero"
+            );
+        }
+
+        if (sender.getBalance().compareTo(amount) < 0) {
+            throw new IllegalArgumentException(
+                    "Insufficient wallet balance"
+            );
+        }
+
+        sender.setBalance(
+                sender.getBalance().subtract(amount)
+        );
+
+        receiver.setBalance(
+                receiver.getBalance().add(amount)
+        );
+
+        sender.setUpdatedAt(LocalDateTime.now());
+        receiver.setUpdatedAt(LocalDateTime.now());
+
+        walletRepository.save(sender);
+        walletRepository.save(receiver);
+
+        Transaction transaction = Transaction.builder()
+                .reference(generateReference())
+                .senderWallet(sender)
+                .receiverWallet(receiver)
+                .amount(amount)
+                .currency(sender.getCurrency())
+                .type(TransactionType.TRANSFER)
+                .status(TransactionStatus.SUCCESSFUL)
+                .description(request.getDescription())
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+
+        transaction = transactionRepository.save(transaction);
+
+        return toResponse(transaction);
+    }
+
+    private String generateReference() {
+
+        String reference;
+
+        do {
+            String random =
+                    Long.toString(
+                            ThreadLocalRandom.current()
+                                    .nextLong(100000, 999999)
+                    );
+
+            reference =
+                    "WT-" +
+                    LocalDateTime.now()
+                            .toString()
+                            .replace("-", "")
+                            .replace(":", "")
+                            .substring(0, 8)
+                    + "-" +
+                    random;
+
+        } while (
+                transactionRepository.existsByReference(reference)
+        );
+
+        return reference;
+    }
+
+    private TransactionResponse toResponse(
+            Transaction transaction
+    ) {
+
+        return TransactionResponse.builder()
+                .id(transaction.getId())
+                .reference(transaction.getReference())
+                .senderWalletNumber(
+                        transaction
+                                .getSenderWallet()
+                                .getWalletNumber()
+                )
+                .receiverWalletNumber(
+                        transaction
+                                .getReceiverWallet()
+                                .getWalletNumber()
+                )
+                .amount(transaction.getAmount())
+                .currency(transaction.getCurrency())
+                .type(transaction.getType())
+                .status(transaction.getStatus())
+                .description(transaction.getDescription())
+                .createdAt(transaction.getCreatedAt())
+                .build();
+    }
+}

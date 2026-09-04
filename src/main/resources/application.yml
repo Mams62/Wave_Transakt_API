@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: WaveTransaktAPI
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/WaveTransaktAPI
+    username: ${WAVE_DB_USERNAME}
+    password: ${WAVE_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+
+jwt:
+  secret: ${WAVE_JWT_SECRET}
+  expiration: ${WAVE_JWT_EXPIRATION:86400000}
+
+paystack:
+  public-key: ${WAVE_PAYSTACK_PUBLIC_KEY}
+  secret-key: ${WAVE_PAYSTACK_SECRET_KEY}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    root: INFO
+    com.wavetransakt: DEBUG
+    org.springframework.security: DEBUG

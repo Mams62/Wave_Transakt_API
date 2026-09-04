@@ -1,0 +1,2 @@
+-- V10 is intentionally empty.
+-- verification_codes was already created by V8.
