@@ -10,13 +10,13 @@ import com.wavetransakt.payment.repository.PaymentTransactionRepository;
 import com.wavetransakt.user.entity.User;
 import com.wavetransakt.user.repository.UserRepository;
 import com.wavetransakt.wallet.entity.Wallet;
+import com.wavetransakt.wallet.entity.WalletStatus;
 import com.wavetransakt.wallet.repository.WalletRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
@@ -25,70 +25,116 @@ import java.math.BigDecimal;
 @RequiredArgsConstructor
 public class PaystackService {
 
+    private static final String BASE_URL =
+            "https://api.paystack.co/transaction/";
+
     private final RestTemplate restTemplate;
-    private final PaymentTransactionRepository paymentTransactionRepository;
-    private final UserRepository userRepository;
-    private final WalletRepository walletRepository;
-    private final ObjectMapper objectMapper;
+
+    private final PaymentTransactionRepository
+            paymentTransactionRepository;
+
+    private final UserRepository
+            userRepository;
+
+    private final WalletRepository
+            walletRepository;
+
+    private final ObjectMapper
+            objectMapper;
+
+    private final PaymentSettlementService
+            paymentSettlementService;
 
     @Value("${paystack.secret-key}")
     private String secretKey;
 
-    private static final String BASE_URL =
-            "https://api.paystack.co/transaction/";
-
     /**
-     * Initialize a wallet funding transaction.
+     * ============================================================
+     * INITIALIZE PAYSTACK FUNDING
+     * ============================================================
      */
-    @Transactional
     public String initializeTransaction(
             InitializePaymentRequest request,
             Authentication authentication
     ) {
 
-        User user = getAuthenticatedUser(authentication);
-
-        Wallet wallet = walletRepository
-                .findByUserId(user.getId())
-                .orElseThrow(() ->
-                        new IllegalArgumentException(
-                                "Wallet not found"
-                        )
+        User user =
+                getAuthenticatedUser(
+                        authentication
                 );
 
-        if (wallet.getStatus().name().equals("SUSPENDED")
-                || wallet.getStatus().name().equals("BLOCKED")
-                || wallet.getStatus().name().equals("CLOSED")) {
+        Wallet wallet =
+                walletRepository
+                        .findByUserId(
+                                user.getId()
+                        )
+                        .orElseThrow(() ->
+                                new IllegalArgumentException(
+                                        "Wallet not found"
+                                )
+                        );
+
+        if (wallet.getStatus() !=
+                WalletStatus.ACTIVE) {
 
             throw new IllegalArgumentException(
                     "Wallet is not available for funding"
             );
         }
 
-        if (!user.getEmail().equalsIgnoreCase(request.getEmail())) {
+        if (request == null) {
+
+            throw new IllegalArgumentException(
+                    "Payment request is required"
+            );
+        }
+
+        if (request.getEmail() == null ||
+                !user.getEmail()
+                        .equalsIgnoreCase(
+                                request.getEmail()
+                        )) {
+
             throw new IllegalArgumentException(
                     "Payment email must match the authenticated account"
             );
         }
 
-        HttpHeaders headers = new HttpHeaders();
+        if (request.getAmount() <= 0) {
 
-        headers.setBearerAuth(secretKey);
-        headers.setContentType(MediaType.APPLICATION_JSON);
+            throw new IllegalArgumentException(
+                    "Payment amount must be greater than zero"
+            );
+        }
 
-        String body = """
+        HttpHeaders headers =
+                new HttpHeaders();
+
+        headers.setBearerAuth(
+                secretKey
+        );
+
+        headers.setContentType(
+                MediaType.APPLICATION_JSON
+        );
+
+        String body =
+                """
                 {
                     "email": "%s",
                     "amount": %d,
                     "currency": "NGN"
                 }
                 """.formatted(
-                request.getEmail(),
-                request.getAmount()
-        );
+                        request.getEmail(),
+                        request.getAmount()
+                );
 
         HttpEntity<String> entity =
-                new HttpEntity<>(body, headers);
+                new HttpEntity<>(
+                        body,
+                        headers
+                );
 
         ResponseEntity<String> response =
                 restTemplate.exchange(
@@ -98,8 +144,10 @@ public class PaystackService {
                         String.class
                 );
 
-        if (!response.getStatusCode().is2xxSuccessful()
-                || response.getBody() == null) {
+        if (!response
+                .getStatusCode()
+                .is2xxSuccessful() ||
+                response.getBody() == null) {
 
             throw new IllegalArgumentException(
                     "Unable to initialize Paystack transaction"
@@ -109,10 +157,13 @@ public class PaystackService {
         try {
 
             JsonNode root =
-                    parseJson(response.getBody());
+                    parseJson(
+                            response.getBody()
+                    );
 
             boolean status =
-                    root.path("status").asBoolean(false);
+                    root.path("status")
+                            .asBoolean(false);
 
             if (!status) {
 
@@ -124,30 +175,45 @@ public class PaystackService {
                 );
             }
 
-            JsonNode data = root.path("data");
+            JsonNode data =
+                    root.path("data");
 
             String reference =
-                    data.path("reference").asText(null);
+                    data.path("reference")
+                            .asText(null);
 
-            if (reference == null || reference.isBlank()) {
+            if (reference == null ||
+                    reference.isBlank()) {
 
                 throw new IllegalArgumentException(
                         "Paystack did not return a transaction reference"
                 );
             }
 
+            if (paymentTransactionRepository
+                    .existsByReference(reference)) {
+
+                throw new IllegalArgumentException(
+                        "Duplicate Paystack payment reference"
+                );
+            }
+
+            /*
+             * Paystack request amount is kobo.
+             * Store local wallet amount in naira.
+             */
+            BigDecimal amountNaira =
+                    BigDecimal.valueOf(
+                            request.getAmount(),
+                            2
+                    );
+
             PaymentTransaction transaction =
                     PaymentTransaction.builder()
                             .user(user)
                             .wallet(wallet)
                             .reference(reference)
-                            .amount(
-                                    BigDecimal.valueOf(
-                                            request.getAmount()
-                                    ).divide(
-                                            BigDecimal.valueOf(100)
-                                    )
-                            )
+                            .amount(amountNaira)
                             .currency("NGN")
                             .provider("PAYSTACK")
                             .status(
@@ -155,7 +221,9 @@ public class PaystackService {
                             )
                             .build();
 
-            paymentTransactionRepository.save(transaction);
+            paymentTransactionRepository.save(
+                    transaction
+            );
 
             return response.getBody();
 
@@ -173,44 +241,66 @@ public class PaystackService {
     }
 
     /**
-     * Verify a Paystack transaction and credit the wallet once.
+     * ============================================================
+     * VERIFY PAYSTACK FUNDING
+     * ============================================================
      *
-     * Paystack amounts are represented in kobo.
-     * Wallet amounts are represented in naira.
+     * IMPORTANT:
+     *
+     * This method itself is NOT @Transactional.
+     *
+     * We first obtain Paystack's response without holding
+     * database locks.
+     *
+     * Only the local settlement phase acquires locks.
      */
-    @Transactional
     public String verifyTransaction(
             String reference,
             Authentication authentication
     ) {
 
-        User user = getAuthenticatedUser(authentication);
+        User user =
+                getAuthenticatedUser(
+                        authentication
+                );
 
-        PaymentTransaction transaction =
+        if (reference == null ||
+                reference.isBlank()) {
+
+            throw new IllegalArgumentException(
+                    "Payment reference is required"
+            );
+        }
+
+        /*
+         * Fast ownership/idempotency check before making
+         * another external Paystack request.
+         */
+        PaymentTransaction localTransaction =
                 paymentTransactionRepository
-                        .findByReference(reference)
+                        .findByReference(
+                                reference
+                        )
                         .orElseThrow(() ->
                                 new IllegalArgumentException(
                                         "Payment transaction not found"
                                 )
                         );
 
-        if (!transaction.getUser().getId()
-                .equals(user.getId())) {
+        if (!localTransaction
+                .getUser()
+                .getId()
+                .equals(
+                        user.getId()
+                )) {
 
             throw new IllegalArgumentException(
                     "You are not authorized to verify this transaction"
             );
         }
 
-        /*
-         * Idempotency:
-         *
-         * If the transaction has already been successfully
-         * processed, do NOT credit the wallet again.
-         */
-        if (transaction.getStatus()
-                == PaymentTransactionStatus.SUCCESSFUL) {
+        if (localTransaction.getStatus() ==
+                PaymentTransactionStatus.SUCCESSFUL) {
 
             return """
                     {
@@ -221,199 +311,170 @@ public class PaystackService {
                     """.formatted(reference);
         }
 
-        HttpHeaders headers = new HttpHeaders();
+        /*
+         * ========================================================
+         * VERIFY DIRECTLY WITH PAYSTACK
+         * ========================================================
+         */
 
-        headers.setBearerAuth(secretKey);
+        HttpHeaders headers =
+                new HttpHeaders();
+
+        headers.setBearerAuth(
+                secretKey
+        );
 
         HttpEntity<Void> entity =
-                new HttpEntity<>(headers);
+                new HttpEntity<>(
+                        headers
+                );
 
         ResponseEntity<String> response =
                 restTemplate.exchange(
-                        BASE_URL + "verify/" + reference,
+                        BASE_URL +
+                                "verify/" +
+                                reference,
                         HttpMethod.GET,
                         entity,
                         String.class
                 );
 
-        if (!response.getStatusCode().is2xxSuccessful()
-                || response.getBody() == null) {
+        if (!response
+                .getStatusCode()
+                .is2xxSuccessful() ||
+                response.getBody() == null) {
 
             throw new IllegalArgumentException(
                     "Unable to verify Paystack transaction"
             );
         }
 
-        try {
-
-            JsonNode root =
-                    parseJson(response.getBody());
-
-            boolean status =
-                    root.path("status").asBoolean(false);
-
-            if (!status) {
-
-                transaction.setStatus(
-                        PaymentTransactionStatus.FAILED
+        JsonNode root =
+                parseJson(
+                        response.getBody()
                 );
 
-                paymentTransactionRepository.save(
-                        transaction
-                );
+        boolean apiStatus =
+                root.path("status")
+                        .asBoolean(false);
 
-                return response.getBody();
-            }
-
-            JsonNode data = root.path("data");
-
-            String paystackStatus =
-                    data.path("status").asText("");
-
-            long paystackAmount =
-                    data.path("amount").asLong(0);
-
-            String currency =
-                    data.path("currency").asText("");
-
-            String transactionId =
-                    data.path("id").asText(null);
-
-            /*
-             * Only a successful Paystack transaction
-             * can credit the wallet.
-             */
-            if (!"success".equalsIgnoreCase(paystackStatus)) {
-
-                transaction.setStatus(
-                        PaymentTransactionStatus.FAILED
-                );
-
-                paymentTransactionRepository.save(
-                        transaction
-                );
-
-                return response.getBody();
-            }
-
-            /*
-             * Confirm currency.
-             */
-            if (!"NGN".equalsIgnoreCase(currency)) {
-
-                transaction.setStatus(
-                        PaymentTransactionStatus.FAILED
-                );
-
-                paymentTransactionRepository.save(
-                        transaction
-                );
-
-                throw new IllegalArgumentException(
-                        "Unexpected payment currency"
-                );
-            }
-
-            /*
-             * Paystack amount is kobo.
-             */
-            BigDecimal verifiedAmount =
-                    BigDecimal.valueOf(paystackAmount)
-                            .divide(
-                                    BigDecimal.valueOf(100)
-                            );
-
-            /*
-             * Never trust the client amount.
-             * Compare the amount Paystack actually
-             * processed with our stored transaction.
-             */
-            if (verifiedAmount.compareTo(
-                    transaction.getAmount()
-            ) != 0) {
-
-                transaction.setStatus(
-                        PaymentTransactionStatus.FAILED
-                );
-
-                paymentTransactionRepository.save(
-                        transaction
-                );
-
-                throw new IllegalArgumentException(
-                        "Payment amount mismatch"
-                );
-            }
-
-            /*
-             * Get the wallet again from the database.
-             */
-            Wallet wallet =
-                    walletRepository
-                            .findByUserId(user.getId())
-                            .orElseThrow(() ->
-                                    new IllegalArgumentException(
-                                            "Wallet not found"
-                                    )
-                            );
-
-            if (!wallet.getStatus().name()
-                    .equals("ACTIVE")) {
-
-                throw new IllegalArgumentException(
-                        "Wallet is not active"
-                );
-            }
-
-            /*
-             * Credit wallet exactly once.
-             */
-            wallet.setBalance(
-                    wallet.getBalance()
-                            .add(verifiedAmount)
-            );
-
-            walletRepository.save(wallet);
-
-            /*
-             * Mark transaction successful only
-             * after wallet credit has been persisted.
-             */
-            transaction.setStatus(
-                    PaymentTransactionStatus.SUCCESSFUL
-            );
-
-            transaction.setProviderTransactionId(
-                    transactionId
-            );
-
-            paymentTransactionRepository.save(
-                    transaction
-            );
+        /*
+         * No wallet mutation for an unsuccessful provider
+         * verification response.
+         */
+        if (!apiStatus) {
 
             return response.getBody();
+        }
 
-        } catch (Exception e) {
+        JsonNode data =
+                root.path("data");
 
-            if (e instanceof IllegalArgumentException) {
-                throw e;
-            }
+        String providerReference =
+                data.path("reference")
+                        .asText("");
+
+        /*
+         * Never accept a Paystack response for a different
+         * transaction reference.
+         */
+        if (!reference.equals(
+                providerReference
+        )) {
 
             throw new IllegalArgumentException(
-                    "Unable to process Paystack verification response",
-                    e
+                    "Paystack reference mismatch"
             );
         }
+
+        String paystackStatus =
+                data.path("status")
+                        .asText("");
+
+        /*
+         * Only SUCCESS creates wallet value.
+         *
+         * Pending/abandoned/failed responses do not credit
+         * anything here.
+         */
+        if (!"success".equalsIgnoreCase(
+                paystackStatus
+        )) {
+
+            return response.getBody();
+        }
+
+        String currency =
+                data.path("currency")
+                        .asText("");
+
+        if (!"NGN".equalsIgnoreCase(
+                currency
+        )) {
+
+            throw new IllegalArgumentException(
+                    "Unexpected payment currency"
+            );
+        }
+
+        long paystackAmountKobo =
+                data.path("amount")
+                        .asLong(0);
+
+        if (paystackAmountKobo <= 0) {
+
+            throw new IllegalArgumentException(
+                    "Invalid Paystack amount"
+            );
+        }
+
+        BigDecimal verifiedAmount =
+                BigDecimal.valueOf(
+                        paystackAmountKobo,
+                        2
+                );
+
+        String providerTransactionId =
+                data.path("id")
+                        .asText(null);
+
+        if (providerTransactionId == null ||
+                providerTransactionId.isBlank()) {
+
+            throw new IllegalArgumentException(
+                    "Paystack transaction ID is missing"
+            );
+        }
+
+        /*
+         * ========================================================
+         * ATOMIC LOCAL SETTLEMENT
+         * ========================================================
+         */
+
+        return paymentSettlementService
+                .settleSuccessfulPaystackPayment(
+                        user.getId(),
+                        reference,
+                        providerTransactionId,
+                        verifiedAmount,
+                        currency.toUpperCase(),
+                        response.getBody()
+                );
     }
 
     /**
-     * Safely parse a Paystack JSON response.
+     * Parse Paystack JSON safely.
      */
-    private JsonNode parseJson(String responseBody) {
+    private JsonNode parseJson(
+            String responseBody
+    ) {
 
         try {
 
-            return objectMapper.readTree(responseBody);
+            return objectMapper.readTree(
+                    responseBody
+            );
 
         } catch (JsonProcessingException e) {
 
@@ -425,14 +486,14 @@ public class PaystackService {
     }
 
     /**
-     * Get the authenticated user from Spring Security.
+     * Resolve authenticated Wave Transakt user.
      */
     private User getAuthenticatedUser(
             Authentication authentication
     ) {
 
-        if (authentication == null
-                || !authentication.isAuthenticated()) {
+        if (authentication == null ||
+                !authentication.isAuthenticated()) {
 
             throw new IllegalArgumentException(
                     "Authentication required"
@@ -450,7 +511,9 @@ public class PaystackService {
         }
 
         return userRepository
-                .findById(user.getId())
+                .findById(
+                        user.getId()
+                )
                 .orElseThrow(() ->
                         new IllegalArgumentException(
                                 "User not found"
