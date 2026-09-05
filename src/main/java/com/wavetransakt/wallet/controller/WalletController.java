@@ -8,7 +8,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
 import java.util.UUID;
 
 @RestController
@@ -19,7 +18,7 @@ public class WalletController {
     private final WalletService walletService;
 
     /**
-     * Get the authenticated user's wallet.
+     * Return the authenticated user's wallet.
      */
     @GetMapping
     public ResponseEntity<WalletResponse> getWallet(
@@ -51,45 +50,11 @@ public class WalletController {
         );
     }
 
-    /**
-     * Development/testing wallet funding endpoint.
+    /*
+     * Direct wallet funding has intentionally been removed.
      *
-     * This adds funds directly to the authenticated
-     * user's wallet.
-     *
-     * IMPORTANT:
-     * This endpoint is for development/testing only.
-     * It should not be exposed in production.
+     * Wallet value must only be created after a verified
+     * funding provider event such as Paystack/Wema and must
+     * also be represented in the double-entry ledger.
      */
-    @PostMapping("/fund")
-    public ResponseEntity<WalletResponse> fundWallet(
-            Authentication authentication,
-            @RequestParam BigDecimal amount
-    ) {
-
-        if (authentication == null ||
-                !authentication.isAuthenticated()) {
-
-            return ResponseEntity
-                    .status(401)
-                    .build();
-        }
-
-        Object principal =
-                authentication.getPrincipal();
-
-        if (!(principal instanceof User user)) {
-
-            return ResponseEntity
-                    .status(401)
-                    .build();
-        }
-
-        return ResponseEntity.ok(
-                walletService.fundWallet(
-                        user.getId(),
-                        amount
-                )
-        );
-    }
 }
