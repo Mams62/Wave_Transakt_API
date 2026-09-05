@@ -1,5 +1,6 @@
 package com.wavetransakt.transaction.service;
 
+import com.wavetransakt.ledger.service.LedgerService;
 import com.wavetransakt.transaction.dto.TransactionResponse;
 import com.wavetransakt.transaction.dto.TransferRequest;
 import com.wavetransakt.transaction.entity.Transaction;
@@ -20,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
@@ -34,9 +36,39 @@ public class TransactionService {
                     "^[A-Za-z0-9._:-]{8,128}$"
             );
 
-    private final TransactionRepository transactionRepository;
-    private final WalletRepository walletRepository;
+    private static final BigDecimal MIN_TRANSFER_AMOUNT =
+            new BigDecimal("1.00");
 
+    private final TransactionRepository
+            transactionRepository;
+
+    private final WalletRepository
+            walletRepository;
+
+    /*
+     * Stage 6:
+     * Double-entry accounting ledger.
+     */
+    private final LedgerService
+            ledgerService;
+
+    /**
+     * ============================================================
+     * WALLET TO WALLET TRANSFER
+     * ============================================================
+     *
+     * Protections:
+     *
+     * - authenticated sender supplied by controller
+     * - Idempotency-Key
+     * - request fingerprint
+     * - deterministic pessimistic wallet locking
+     * - balance check after locking
+     * - atomic sender/receiver balance mutation
+     * - double-entry ledger
+     *
+     * Everything runs inside one database transaction.
+     */
     @Transactional
     public TransactionResponse transfer(
             UUID senderUserId,
@@ -46,7 +78,7 @@ public class TransactionService {
 
         if (senderUserId == null) {
             throw new IllegalArgumentException(
-                    "Authenticated user is required"
+                    "Sender user is required"
             );
         }
 
@@ -77,11 +109,11 @@ public class TransactionService {
                 );
 
         /*
-         * Resolve wallet identities.
-         *
-         * These objects are only used to determine IDs.
-         * Balance mutation happens only after pessimistic locks.
+         * ========================================================
+         * RESOLVE WALLETS BEFORE LOCKING
+         * ========================================================
          */
+
         Wallet senderCandidate =
                 walletRepository
                         .findByUserId(senderUserId)
@@ -102,15 +134,25 @@ public class TransactionService {
                                 )
                         );
 
-        if (senderCandidate
-                .getId()
-                .equals(receiverCandidate.getId())) {
+        if (senderCandidate.getId().equals(
+                receiverCandidate.getId()
+        )) {
 
             throw new IllegalArgumentException(
                     "You cannot transfer money to your own wallet"
             );
         }
 
+        /*
+         * Fingerprint represents the exact financial instruction.
+         *
+         * Same:
+         * sender + key + fingerprint
+         *
+         * means retry.
+         *
+         * Same key with another fingerprint means conflict.
+         */
         String requestFingerprint =
                 generateRequestFingerprint(
                         receiverCandidate.getId(),
@@ -119,11 +161,11 @@ public class TransactionService {
                 );
 
         /*
-         * Fast idempotency check.
-         *
-         * Most retries will be resolved here without
-         * acquiring wallet locks.
+         * ========================================================
+         * FAST IDEMPOTENCY CHECK
+         * ========================================================
          */
+
         Transaction existing =
                 transactionRepository
                         .findBySenderWalletIdAndIdempotencyKey(
@@ -133,6 +175,7 @@ public class TransactionService {
                         .orElse(null);
 
         if (existing != null) {
+
             return resolveIdempotentReplay(
                     existing,
                     requestFingerprint
@@ -146,37 +189,41 @@ public class TransactionService {
                 receiverCandidate.getId();
 
         /*
-         * Deterministic lock ordering protects against
-         * transfer deadlocks such as:
+         * ========================================================
+         * DETERMINISTIC WALLET LOCK ORDER
+         * ========================================================
          *
-         * Wallet A -> Wallet B
-         * Wallet B -> Wallet A
+         * Lock UUIDs in the same global order to reduce
+         * deadlock risk.
          */
-        UUID firstLockId;
-        UUID secondLockId;
+
+        UUID firstWalletId;
+        UUID secondWalletId;
 
         if (senderWalletId.compareTo(
                 receiverWalletId
         ) < 0) {
 
-            firstLockId =
+            firstWalletId =
                     senderWalletId;
 
-            secondLockId =
+            secondWalletId =
                     receiverWalletId;
 
         } else {
 
-            firstLockId =
+            firstWalletId =
                     receiverWalletId;
 
-            secondLockId =
+            secondWalletId =
                     senderWalletId;
         }
 
         Wallet firstLockedWallet =
                 walletRepository
-                        .findByIdForUpdate(firstLockId)
+                        .findByIdForUpdate(
+                                firstWalletId
+                        )
                         .orElseThrow(() ->
                                 new IllegalArgumentException(
                                         "Wallet not found"
@@ -185,38 +232,48 @@ public class TransactionService {
 
         Wallet secondLockedWallet =
                 walletRepository
-                        .findByIdForUpdate(secondLockId)
+                        .findByIdForUpdate(
+                                secondWalletId
+                        )
                         .orElseThrow(() ->
                                 new IllegalArgumentException(
                                         "Wallet not found"
                                 )
                         );
 
-        Wallet sender =
-                firstLockedWallet
-                        .getId()
-                        .equals(senderWalletId)
+        Wallet sender;
+        Wallet receiver;
 
-                        ? firstLockedWallet
-                        : secondLockedWallet;
+        if (firstLockedWallet
+                .getId()
+                .equals(senderWalletId)) {
 
-        Wallet receiver =
-                firstLockedWallet
-                        .getId()
-                        .equals(receiverWalletId)
+            sender =
+                    firstLockedWallet;
 
-                        ? firstLockedWallet
-                        : secondLockedWallet;
+            receiver =
+                    secondLockedWallet;
+
+        } else {
+
+            sender =
+                    secondLockedWallet;
+
+            receiver =
+                    firstLockedWallet;
+        }
 
         /*
-         * CRITICAL:
+         * ========================================================
+         * IDEMPOTENCY RECHECK AFTER LOCK
+         * ========================================================
          *
-         * Recheck idempotency AFTER acquiring the sender
-         * wallet lock.
+         * Critical concurrency protection.
          *
-         * Two simultaneous requests may both pass the first
-         * lookup before either transaction commits.
+         * Another request may have completed while this request
+         * was waiting for the wallet lock.
          */
+
         existing =
                 transactionRepository
                         .findBySenderWalletIdAndIdempotencyKey(
@@ -226,6 +283,7 @@ public class TransactionService {
                         .orElse(null);
 
         if (existing != null) {
+
             return resolveIdempotentReplay(
                     existing,
                     requestFingerprint
@@ -233,9 +291,11 @@ public class TransactionService {
         }
 
         /*
-         * All financial checks occur while the wallet
-         * rows are locked.
+         * ========================================================
+         * FINANCIAL VALIDATION WHILE LOCKED
+         * ========================================================
          */
+
         if (sender.getStatus() !=
                 WalletStatus.ACTIVE) {
 
@@ -253,14 +313,33 @@ public class TransactionService {
         }
 
         if (sender.getBalance() == null) {
+
             throw new IllegalStateException(
                     "Sender wallet balance is unavailable"
             );
         }
 
         if (receiver.getBalance() == null) {
+
             throw new IllegalStateException(
                     "Receiver wallet balance is unavailable"
+            );
+        }
+
+        if (sender.getCurrency() == null ||
+                receiver.getCurrency() == null) {
+
+            throw new IllegalStateException(
+                    "Wallet currency is unavailable"
+            );
+        }
+
+        if (!sender.getCurrency().equals(
+                receiver.getCurrency()
+        )) {
+
+            throw new IllegalArgumentException(
+                    "Wallet currencies do not match"
             );
         }
 
@@ -271,6 +350,12 @@ public class TransactionService {
                     "Insufficient wallet balance"
             );
         }
+
+        /*
+         * ========================================================
+         * BALANCE PROJECTION UPDATE
+         * ========================================================
+         */
 
         sender.setBalance(
                 sender.getBalance()
@@ -291,6 +376,12 @@ public class TransactionService {
         walletRepository.save(sender);
         walletRepository.save(receiver);
 
+        /*
+         * ========================================================
+         * BUSINESS TRANSACTION
+         * ========================================================
+         */
+
         Transaction transaction =
                 Transaction.builder()
                         .reference(
@@ -305,14 +396,18 @@ public class TransactionService {
                         .senderWallet(sender)
                         .receiverWallet(receiver)
                         .amount(amount)
-                        .currency(sender.getCurrency())
+                        .currency(
+                                sender.getCurrency()
+                        )
                         .type(
                                 TransactionType.TRANSFER
                         )
                         .status(
                                 TransactionStatus.SUCCESSFUL
                         )
-                        .description(description)
+                        .description(
+                                description
+                        )
                         .createdAt(now)
                         .updatedAt(now)
                         .build();
@@ -321,9 +416,59 @@ public class TransactionService {
                 transactionRepository
                         .save(transaction);
 
-        return toResponse(transaction);
+        /*
+         * ========================================================
+         * STAGE 6 — DOUBLE ENTRY LEDGER
+         * ========================================================
+         *
+         * Sender wallet is a liability account.
+         *
+         * Sending money reduces the liability:
+         *
+         *      DEBIT sender wallet
+         *
+         * Receiving money increases the liability:
+         *
+         *      CREDIT receiver wallet
+         *
+         * Example:
+         *
+         *      DEBIT  Sender     5,000
+         *      CREDIT Receiver   5,000
+         *
+         * Total debit == total credit.
+         *
+         * This happens within the SAME Spring transaction as
+         * the wallet mutation and transaction record.
+         */
+
+        ledgerService.recordWalletTransfer(
+                transaction.getReference(),
+                sender,
+                receiver,
+                amount,
+                transaction.getCurrency(),
+                description
+        );
+
+        return toResponse(
+                transaction
+        );
     }
 
+    /**
+     * ============================================================
+     * IDEMPOTENCY REPLAY
+     * ============================================================
+     *
+     * Same key + same request:
+     *
+     * return the original transaction.
+     *
+     * Same key + changed request:
+     *
+     * reject with HTTP 409 via GlobalExceptionHandler.
+     */
     private TransactionResponse
     resolveIdempotentReplay(
             Transaction existing,
@@ -339,20 +484,20 @@ public class TransactionService {
                 )) {
 
             throw new IdempotencyConflictException(
-                    "This Idempotency-Key has already " +
-                            "been used for a different transfer"
+                    "Idempotency-Key has already been used for a different transfer"
             );
         }
 
-        /*
-         * Same sender + same key + same request.
-         *
-         * Return the original financial result.
-         * Never debit again.
-         */
-        return toResponse(existing);
+        return toResponse(
+                existing
+        );
     }
 
+    /**
+     * ============================================================
+     * IDEMPOTENCY KEY VALIDATION
+     * ============================================================
+     */
     private String normalizeIdempotencyKey(
             String rawKey
     ) {
@@ -373,15 +518,18 @@ public class TransactionService {
                 .matches()) {
 
             throw new IllegalArgumentException(
-                    "Idempotency-Key must be 8 to 128 " +
-                            "characters and contain only letters, " +
-                            "numbers, '.', '_', ':', or '-'"
+                    "Invalid Idempotency-Key"
             );
         }
 
         return key;
     }
 
+    /**
+     * ============================================================
+     * WALLET NUMBER NORMALIZATION
+     * ============================================================
+     */
     private String normalizeWalletNumber(
             String walletNumber
     ) {
@@ -397,45 +545,59 @@ public class TransactionService {
         return walletNumber.trim();
     }
 
+    /**
+     * ============================================================
+     * AMOUNT NORMALIZATION
+     * ============================================================
+     *
+     * NGN transaction amount is stored with exactly two
+     * decimal places.
+     */
     private BigDecimal normalizeAmount(
             BigDecimal amount
     ) {
 
         if (amount == null) {
+
             throw new IllegalArgumentException(
-                    "Transfer amount is required"
+                    "Amount is required"
             );
         }
 
-        if (amount.compareTo(
-                BigDecimal.ZERO
-        ) <= 0) {
-
-            throw new IllegalArgumentException(
-                    "Transfer amount must be greater than zero"
-            );
-        }
+        BigDecimal normalized;
 
         try {
 
-            /*
-             * Financial amounts are stored at 2 decimal
-             * places. We reject rather than silently round.
-             */
-            return amount.setScale(
-                    2,
-                    RoundingMode.UNNECESSARY
-            );
+            normalized =
+                    amount.setScale(
+                            2,
+                            RoundingMode.UNNECESSARY
+                    );
 
-        } catch (ArithmeticException ex) {
+        } catch (ArithmeticException e) {
 
             throw new IllegalArgumentException(
-                    "Transfer amount must not contain " +
-                            "more than 2 decimal places"
+                    "Amount must not contain more than 2 decimal places"
             );
         }
+
+        if (normalized.compareTo(
+                MIN_TRANSFER_AMOUNT
+        ) < 0) {
+
+            throw new IllegalArgumentException(
+                    "Amount must be at least 1.00"
+            );
+        }
+
+        return normalized;
     }
 
+    /**
+     * ============================================================
+     * DESCRIPTION NORMALIZATION
+     * ============================================================
+     */
     private String normalizeDescription(
             String description
     ) {
@@ -452,37 +614,46 @@ public class TransactionService {
         }
 
         if (normalized.length() > 255) {
+
             throw new IllegalArgumentException(
-                    "Description must not exceed " +
-                            "255 characters"
+                    "Description must not exceed 255 characters"
             );
         }
 
         return normalized;
     }
 
+    /**
+     * ============================================================
+     * REQUEST FINGERPRINT
+     * ============================================================
+     *
+     * SHA-256(
+     *
+     *     TRANSFER
+     *     receiver UUID
+     *     normalized amount
+     *     normalized description
+     *
+     * )
+     */
     private String generateRequestFingerprint(
             UUID receiverWalletId,
             BigDecimal amount,
             String description
     ) {
 
-        /*
-         * Canonical representation of the user's exact
-         * financial instruction.
-         *
-         * We use the receiver's immutable UUID rather than
-         * display text.
-         */
         String canonicalRequest =
                 "TRANSFER\n" +
                         receiverWalletId +
                         "\n" +
                         amount.toPlainString() +
                         "\n" +
-                        (description == null
-                                ? ""
-                                : description);
+                        (
+                                description == null
+                                        ? ""
+                                        : description
+                        );
 
         try {
 
@@ -502,35 +673,41 @@ public class TransactionService {
                     .of()
                     .formatHex(hash);
 
-        } catch (NoSuchAlgorithmException ex) {
+        } catch (NoSuchAlgorithmException e) {
 
             throw new IllegalStateException(
                     "SHA-256 is unavailable",
-                    ex
+                    e
             );
         }
     }
 
+    /**
+     * ============================================================
+     * TRANSACTION REFERENCE
+     * ============================================================
+     */
     private String generateReference() {
 
         String reference;
 
         do {
 
-            String random =
-                    Long.toString(
-                            ThreadLocalRandom.current()
-                                    .nextLong(
-                                            100000,
-                                            1000000
-                                    )
-                    );
-
             String date =
                     LocalDateTime.now()
-                            .toLocalDate()
-                            .toString()
-                            .replace("-", "");
+                            .format(
+                                    DateTimeFormatter.ofPattern(
+                                            "yyyyMMdd"
+                                    )
+                            );
+
+            int random =
+                    ThreadLocalRandom
+                            .current()
+                            .nextInt(
+                                    100000,
+                                    1000000
+                            );
 
             reference =
                     "WT-" +
@@ -540,18 +717,27 @@ public class TransactionService {
 
         } while (
                 transactionRepository
-                        .existsByReference(reference)
+                        .existsByReference(
+                                reference
+                        )
         );
 
         return reference;
     }
 
+    /**
+     * ============================================================
+     * API RESPONSE
+     * ============================================================
+     */
     private TransactionResponse toResponse(
             Transaction transaction
     ) {
 
         return TransactionResponse.builder()
-                .id(transaction.getId())
+                .id(
+                        transaction.getId()
+                )
                 .reference(
                         transaction.getReference()
                 )
@@ -572,10 +758,14 @@ public class TransactionService {
                         transaction.getCurrency()
                 )
                 .type(
-                        transaction.getType()
+                        TransactionType.valueOf(transaction
+                                .getType()
+                                .name())
                 )
                 .status(
-                        transaction.getStatus()
+                        TransactionStatus.valueOf(transaction
+                                .getStatus()
+                                .name())
                 )
                 .description(
                         transaction.getDescription()
@@ -584,9 +774,5 @@ public class TransactionService {
                         transaction.getCreatedAt()
                 )
                 .build();
-    }
-
-    public Object transfer(UUID id, TransferRequest build) {
-        return null;
     }
 }
