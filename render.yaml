@@ -34,10 +34,19 @@ services:
         value: "false"
       - key: WAVE_RETURN_VERIFICATION_CODE
         value: "true"
-      - key: WAVE_PAYSTACK_PUBLIC_KEY
+
+      # Wema Wallet Services controlled-sandbox configuration.
+      - key: WAVE_WEMA_BASE_URL
+        value: "https://playground.azure-api.net"
+      - key: WAVE_WEMA_WALLET_SUBSCRIPTION_KEY
         sync: false
-      - key: WAVE_PAYSTACK_SECRET_KEY
+      - key: WAVE_WEMA_API_KEY
         sync: false
+      - key: WAVE_WEMA_ACCESS_KEY
+        sync: false
+
+      # VTpass remains sandbox-only for catalog experiments until service
+      # purchases are switched to settle directly from the Wema wallet.
       - key: WAVE_VTPASS_BASE_URL
         value: "https://sandbox.vtpass.com/api/"
       - key: WAVE_VTPASS_API_KEY
