@@ -13,6 +13,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Locale;
+
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -25,60 +27,62 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
+        String email = request.getEmail()
+                .trim()
+                .toLowerCase(Locale.ROOT);
+        String phone = request.getPhone().trim();
+        String bvn = request.getBvn().trim();
+        String nin = request.getNin().trim();
 
-        // Check email
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new IllegalArgumentException(
-                    "Email already registered"
-            );
+        if (userRepository.existsByEmail(email)) {
+            throw new IllegalArgumentException("Email already registered");
         }
 
-        // Check phone
-        if (userRepository.existsByPhone(request.getPhone())) {
-            throw new IllegalArgumentException(
-                    "Phone number already registered"
-            );
+        if (userRepository.existsByPhone(phone)) {
+            throw new IllegalArgumentException("Phone number already registered");
         }
 
-        // Create user
+        if (userRepository.existsByBvn(bvn)) {
+            throw new IllegalArgumentException("BVN already linked to an account");
+        }
+
+        if (userRepository.existsByNin(nin)) {
+            throw new IllegalArgumentException("NIN already linked to an account");
+        }
+
         User user = User.builder()
-                .firstName(request.getFirstName())
-                .lastName(request.getLastName())
-                .email(request.getEmail())
-                .phone(request.getPhone())
-                .password(
-                        passwordEncoder.encode(
-                                request.getPassword()
-                        )
+                .firstName(request.getFirstName().trim())
+                .lastName(request.getLastName().trim())
+                .email(email)
+                .phone(phone)
+                .password(passwordEncoder.encode(request.getPassword()))
+                .bvn(bvn)
+                .nin(nin)
+                .state(request.getState().trim())
+                .localGovernment(request.getLocalGovernment().trim())
+                .dateOfBirth(request.getDateOfBirth())
+                .gender(request.getGender().trim())
+                .transactionPinHash(
+                        passwordEncoder.encode(request.getTransactionPin())
                 )
-                .bvn(request.getBvn())
-                .nin(request.getNin())
                 .build();
 
-        // Save user first
         user = userRepository.save(user);
 
-        // Create wallet
         walletService.createWallet(user);
 
-        // IMPORTANT:
-        // Create and SAVE verification code
         String verificationCode =
                 verificationService.createEmailVerificationCode(user);
 
         /*
-         * DEMO MODE:
-         * We return the code in the response so you can test
-         * the Android application before connecting an email/SMS
-         * provider.
-         *
-         * In production, DO NOT return the verification code.
+         * Controlled-start mode currently returns the verification code
+         * so the closed tester group can complete onboarding before an
+         * email/SMS provider is connected. Do not enable this behavior
+         * for a public production launch.
          */
-
         return AuthResponse.builder()
                 .message(
-                        "Registration successful. " +
-                                "Please verify your email."
+                        "Registration successful. Please verify your email."
                 )
                 .verificationCode(verificationCode)
                 .build();
@@ -86,12 +90,14 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
+        String identifier = request.getIdentifier().trim();
+        String emailIdentifier = identifier.toLowerCase(Locale.ROOT);
 
         User user = userRepository
-                .findByEmail(request.getIdentifier())
+                .findByEmail(emailIdentifier)
                 .orElseGet(() ->
                         userRepository
-                                .findByPhone(request.getIdentifier())
+                                .findByPhone(identifier)
                                 .orElseThrow(() ->
                                         new IllegalArgumentException(
                                                 "Invalid email/phone or password"
