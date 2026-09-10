@@ -4,8 +4,10 @@ import com.wavetransakt.auth.dto.AuthResponse;
 import com.wavetransakt.auth.service.AuthService;
 import com.wavetransakt.user.dto.LoginRequest;
 import com.wavetransakt.user.dto.RegisterRequest;
+import com.wavetransakt.user.dto.UserProfileResponse;
 import com.wavetransakt.user.entity.User;
-import com.wavetransakt.user.repository.UserRepository;
+import com.wavetransakt.wallet.entity.Wallet;
+import com.wavetransakt.wallet.repository.WalletRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -18,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
-    private final UserRepository userRepository;
+    private final WalletRepository walletRepository;
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(
@@ -42,10 +44,7 @@ public class AuthController {
     public ResponseEntity<?> getCurrentUser(
             Authentication authentication
     ) {
-
-        if (authentication == null ||
-                !authentication.isAuthenticated()) {
-
+        if (authentication == null || !authentication.isAuthenticated()) {
             return ResponseEntity
                     .status(401)
                     .body("Authentication required");
@@ -59,6 +58,13 @@ public class AuthController {
                     .body("Invalid authentication");
         }
 
-        return ResponseEntity.ok(user);
+        String walletNumber = walletRepository
+                .findByUserId(user.getId())
+                .map(Wallet::getWalletNumber)
+                .orElse("");
+
+        return ResponseEntity.ok(
+                UserProfileResponse.from(user, walletNumber)
+        );
     }
 }
