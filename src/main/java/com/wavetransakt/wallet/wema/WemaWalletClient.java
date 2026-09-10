@@ -28,19 +28,13 @@ public class WemaWalletClient {
 
     private final RestTemplate restTemplate;
 
-    @Value("${wema.base-url:https://playground.azure-api.net}")
+    @Value("${wema.wallet.base-url:https://playground.azure-api.net}")
     private String baseUrl;
 
-    /**
-     * Some ALAT Playground subscriptions expose an API-management subscription
-     * key in addition to Wema's documented x-api-key. It is optional here: the
-     * official Wallet Services contract requires x-api-key, while this header is
-     * sent only when Wema has issued one for the subscribed product.
-     */
-    @Value("${wema.wallet-subscription-key:}")
+    @Value("${wema.wallet.subscription-key:}")
     private String subscriptionKey;
 
-    @Value("${wema.api-key:}")
+    @Value("${wema.wallet.api-key:}")
     private String apiKey;
 
     public StartResult startNinWallet(User user) {
@@ -80,7 +74,7 @@ public class WemaWalletClient {
         if (trackingId.isBlank()) {
             throw new IllegalStateException(
                     "Wema accepted the wallet request but did not return a tracking ID. " +
-                            "Check the Wema channel profile for Wallet Creation."
+                            "Check the Wema Wallet Services subscription/profile configuration."
             );
         }
 
@@ -305,7 +299,7 @@ public class WemaWalletClient {
     private void requireCredentials() {
         if (apiKey == null || apiKey.isBlank()) {
             throw new IllegalStateException(
-                    "Wema x-api-key is not configured on the server"
+                    "Wema Wallet Services x-api-key is not configured on the server"
             );
         }
     }
@@ -313,7 +307,7 @@ public class WemaWalletClient {
     private String normalizedBaseUrl() {
         String value = baseUrl == null ? "" : baseUrl.trim();
         if (!value.startsWith("https://")) {
-            throw new IllegalStateException("Wema base URL must use HTTPS");
+            throw new IllegalStateException("Wema Wallet Services base URL must use HTTPS");
         }
         return value.endsWith("/")
                 ? value.substring(0, value.length() - 1)
