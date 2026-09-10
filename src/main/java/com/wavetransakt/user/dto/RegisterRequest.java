@@ -35,13 +35,12 @@ public class RegisterRequest {
     )
     private String phone;
 
-    @NotBlank(message = "Password is required")
-    @Size(
-            min = 8,
-            max = 100,
-            message = "Password must be between 8 and 100 characters"
+    @NotBlank(message = "Account PIN is required")
+    @Pattern(
+            regexp = "^\\d{6}$",
+            message = "Account PIN must be exactly 6 digits"
     )
-    private String password;
+    private String accountPin;
 
     @NotBlank(message = "BVN is required")
     @Pattern(regexp = "^\\d{11}$", message = "BVN must be 11 digits")
