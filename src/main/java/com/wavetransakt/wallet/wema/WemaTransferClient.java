@@ -25,19 +25,19 @@ public class WemaTransferClient {
 
     private final RestTemplate restTemplate;
 
-    @Value("${wema.transfer-base-url:https://wema-alatdev-apimgt.azure-api.net}")
+    @Value("${wema.transfer.base-url:https://wema-alatdev-apimgt.azure-api.net}")
     private String baseUrl;
 
-    @Value("${wema.transfer-subscription-key:}")
+    @Value("${wema.transfer.subscription-key:}")
     private String subscriptionKey;
 
     @Value("${wema.access-key:}")
     private String accessKey;
 
-    @Value("${wema.api-key:}")
+    @Value("${wema.transfer.api-key:}")
     private String apiKey;
 
-    @Value("${wema.channel-id:}")
+    @Value("${wema.transfer.channel-id:}")
     private String channelId;
 
     public JsonNode clientWalletNameEnquiry(String accountNumber) {
