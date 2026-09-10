@@ -6,6 +6,7 @@ import com.wavetransakt.serviceprovider.service.ServicePaymentService;
 import com.wavetransakt.user.entity.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +24,9 @@ public class ServicePaymentController {
 
     private final ServicePaymentService servicePaymentService;
 
+    @Value("${wave.services.provider-payments-enabled:false}")
+    private boolean providerPaymentsEnabled;
+
     @PostMapping("/pay")
     public ResponseEntity<ServicePaymentResponse> pay(
             Authentication authentication,
@@ -30,6 +34,12 @@ public class ServicePaymentController {
             String idempotencyKey,
             @Valid @RequestBody ServicePurchaseRequest request
     ) {
+        if (!providerPaymentsEnabled) {
+            throw new IllegalArgumentException(
+                    "Service purchases are temporarily paused while settlement moves to the Wema wallet. Catalog browsing remains enabled."
+            );
+        }
+
         User user = authenticatedUser(authentication);
         return ResponseEntity.ok(
                 servicePaymentService.purchase(user.getId(), idempotencyKey, request)
