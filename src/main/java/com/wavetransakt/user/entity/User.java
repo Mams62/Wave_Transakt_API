@@ -1,5 +1,6 @@
 package com.wavetransakt.user.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.wavetransakt.wallet.entity.Wallet;
 import jakarta.persistence.*;
 import lombok.*;
@@ -41,12 +42,15 @@ public class User {
     @Column(nullable = false, unique = true, length = 20)
     private String phone;
 
+    @JsonIgnore
     @Column(nullable = false)
     private String password;
 
+    @JsonIgnore
     @Column(unique = true, length = 20)
     private String bvn;
 
+    @JsonIgnore
     @Column(unique = true, length = 20)
     private String nin;
 
@@ -62,6 +66,7 @@ public class User {
     @Column(length = 30)
     private String gender;
 
+    @JsonIgnore
     @Column(name = "transaction_pin_hash", length = 100)
     private String transactionPinHash;
 
