@@ -35,18 +35,33 @@ services:
       - key: WAVE_RETURN_VERIFICATION_CODE
         value: "true"
 
-      # Wema Wallet Services controlled-sandbox configuration.
-      - key: WAVE_WEMA_BASE_URL
+      # Wema Wallet Services / account onboarding.
+      # Calls go to the Playground API gateway, not a developer-portal host.
+      - key: WAVE_WEMA_WALLET_BASE_URL
         value: "https://playground.azure-api.net"
       - key: WAVE_WEMA_WALLET_SUBSCRIPTION_KEY
         sync: false
-      - key: WAVE_WEMA_API_KEY
+      - key: WAVE_WEMA_WALLET_API_KEY
         sync: false
+
+      # Wema Wallet Transfer / bank-transfer APIs are exposed from a separate
+      # APIM developer gateway and therefore use a separate subscription key.
+      - key: WAVE_WEMA_TRANSFER_BASE_URL
+        value: "https://wema-alatdev-apimgt.azure-api.net"
+      - key: WAVE_WEMA_TRANSFER_SUBSCRIPTION_KEY
+        sync: false
+      - key: WAVE_WEMA_TRANSFER_API_KEY
+        sync: false
+      - key: WAVE_WEMA_CHANNEL_ID
+        sync: false
+      - key: WAVE_WEMA_TRANSFER_SALT
+        sync: false
+
+      # Used only by Wema products/endpoints that issue a separate access value.
       - key: WAVE_WEMA_ACCESS_KEY
         sync: false
 
-      # VTpass remains sandbox-only for catalog experiments until service
-      # purchases are switched to settle directly from the Wema wallet.
+      # VTpass remains sandbox-only for the controlled services catalog/payment tests.
       - key: WAVE_VTPASS_BASE_URL
         value: "https://sandbox.vtpass.com/api/"
       - key: WAVE_VTPASS_API_KEY
