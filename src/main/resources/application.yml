@@ -37,6 +37,12 @@ paystack:
   public-key: ${WAVE_PAYSTACK_PUBLIC_KEY}
   secret-key: ${WAVE_PAYSTACK_SECRET_KEY}
 
+vtpass:
+  base-url: ${WAVE_VTPASS_BASE_URL:https://sandbox.vtpass.com/api/}
+  api-key: ${WAVE_VTPASS_API_KEY:}
+  public-key: ${WAVE_VTPASS_PUBLIC_KEY:}
+  secret-key: ${WAVE_VTPASS_SECRET_KEY:}
+
 wave:
   demo:
     return-verification-code: ${WAVE_RETURN_VERIFICATION_CODE:false}
