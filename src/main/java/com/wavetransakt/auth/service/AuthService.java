@@ -59,7 +59,10 @@ public class AuthService {
                 .lastName(request.getLastName().trim())
                 .email(email)
                 .phone(phone)
-                .password(passwordEncoder.encode(request.getPassword()))
+                // The existing database column is named `password`, but it now stores
+                // the BCrypt hash of the user's six-digit account PIN. The raw PIN is
+                // never persisted or returned by the API.
+                .password(passwordEncoder.encode(request.getAccountPin()))
                 .bvn(bvn)
                 .nin(nin)
                 .state(request.getState().trim())
@@ -100,17 +103,17 @@ public class AuthService {
                                 .findByPhone(identifier)
                                 .orElseThrow(() ->
                                         new IllegalArgumentException(
-                                                "Invalid email/phone or password"
+                                                "Invalid email/phone or account PIN"
                                         )
                                 )
                 );
 
         if (!passwordEncoder.matches(
-                request.getPassword(),
+                request.getAccountPin(),
                 user.getPassword()
         )) {
             throw new IllegalArgumentException(
-                    "Invalid email/phone or password"
+                    "Invalid email/phone or account PIN"
             );
         }
 
