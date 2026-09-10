@@ -17,6 +17,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.math.BigDecimal;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -107,7 +108,7 @@ public class WemaWalletClient {
         body.put("trackingId", trackingId.trim());
 
         JsonNode response = post(
-                "/wallet-creation/api/CustomerAccount/GenerateWalletAccountForPartnershipsV2/otp",
+                "/wallet-creation/api/CustomerAccount/GenerateWalletAccountForPartnershipsV2/Otp",
                 body
         );
 
@@ -201,6 +202,7 @@ public class WemaWalletClient {
     private JsonNode exchange(String url, HttpMethod method, Object body) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
         headers.setCacheControl(CacheControl.noCache());
         headers.set(API_KEY_HEADER, apiKey.trim());
         if (subscriptionKey != null && !subscriptionKey.isBlank()) {
@@ -242,10 +244,19 @@ public class WemaWalletClient {
         }
 
         String statusText = statusNode.isTextual()
-                ? statusNode.asText("").trim()
+                ? statusNode.asText("").trim().toUpperCase()
                 : "";
-        if ("FAILED".equalsIgnoreCase(statusText) ||
-                "FAILURE".equalsIgnoreCase(statusText)) {
+        if (statusText.equals("FAILED") ||
+                statusText.equals("FAILURE") ||
+                statusText.equals("ERROR") ||
+                statusText.equals("INVALID")) {
+            throw new IllegalArgumentException(message(response, fallback));
+        }
+
+        String responseCode = firstRecursiveText(response, "responseCode", "ResponseCode");
+        if (!responseCode.isBlank() &&
+                !responseCode.equals("00") &&
+                !responseCode.equalsIgnoreCase("SUCCESS")) {
             throw new IllegalArgumentException(message(response, fallback));
         }
     }
@@ -256,7 +267,8 @@ public class WemaWalletClient {
                 "message",
                 "Message",
                 "errorMessage",
-                "responseDescription"
+                "responseDescription",
+                "ResponseMessage"
         );
         return value.isBlank() ? fallback : value;
     }
@@ -308,6 +320,11 @@ public class WemaWalletClient {
         String value = baseUrl == null ? "" : baseUrl.trim();
         if (!value.startsWith("https://")) {
             throw new IllegalStateException("Wema Wallet Services base URL must use HTTPS");
+        }
+        if (value.contains(".developer.azure-api.net")) {
+            throw new IllegalStateException(
+                    "Use the Wema API gateway hostname, not the developer portal hostname"
+            );
         }
         return value.endsWith("/")
                 ? value.substring(0, value.length() - 1)
