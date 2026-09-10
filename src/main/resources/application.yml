@@ -33,9 +33,20 @@ jwt:
   secret: ${WAVE_JWT_SECRET}
   expiration: ${WAVE_JWT_EXPIRATION:86400000}
 
+# Paystack is retained only as legacy code while the controlled build moves to
+# Wema Wallet Services. Blank defaults prevent it from being required at boot;
+# no Android funding route should call it in this stage.
 paystack:
-  public-key: ${WAVE_PAYSTACK_PUBLIC_KEY}
-  secret-key: ${WAVE_PAYSTACK_SECRET_KEY}
+  public-key: ${WAVE_PAYSTACK_PUBLIC_KEY:}
+  secret-key: ${WAVE_PAYSTACK_SECRET_KEY:}
+
+wema:
+  # Playground gateway for Wallet Services. Production must use the gateway
+  # Wema profiles for the Wave Transakt partnership.
+  base-url: ${WAVE_WEMA_BASE_URL:https://playground.azure-api.net}
+  wallet-subscription-key: ${WAVE_WEMA_WALLET_SUBSCRIPTION_KEY:}
+  api-key: ${WAVE_WEMA_API_KEY:}
+  access-key: ${WAVE_WEMA_ACCESS_KEY:}
 
 vtpass:
   base-url: ${WAVE_VTPASS_BASE_URL:https://sandbox.vtpass.com/api/}
