@@ -10,6 +10,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -36,7 +37,7 @@ public class AuthController {
         try {
             return ResponseEntity.ok(authService.login(request));
         } catch (org.springframework.security.authentication.BadCredentialsException e) {
-            return ResponseEntity.status(401).body(Map.of("message", "Invalid email or password"));
+            return ResponseEntity.status(401).body(Map.of("message", "Invalid email/phone or credential"));
         }
     }
 
@@ -44,11 +45,18 @@ public class AuthController {
     public ResponseEntity<?> me(@AuthenticationPrincipal Jwt jwt) {
         UUID id = UUID.fromString(jwt.getSubject());
         User user = authService.findAuthenticatedUser(id);
-        return ResponseEntity.ok(Map.of(
-                "id", user.getId(),
-                "email", user.getEmail(),
-                "fullName", user.getFullName(),
-                "walletNumber", user.getWalletNumber()
-        ));
+
+        Map<String, Object> profile = new LinkedHashMap<>();
+        profile.put("id", user.getId());
+        profile.put("email", user.getEmail());
+        profile.put("fullName", user.getFullName());
+        profile.put("phone", user.getPhone());
+        profile.put("state", user.getState());
+        profile.put("localGovernment", user.getLocalGovernment());
+        profile.put("dateOfBirth", user.getDateOfBirth());
+        profile.put("gender", user.getGender());
+        profile.put("walletNumber", user.getWalletNumber());
+
+        return ResponseEntity.ok(profile);
     }
 }
