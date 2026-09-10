@@ -7,6 +7,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,6 +23,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    private static final Logger log =
+            LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+
     private final JwtService jwtService;
     private final UserRepository userRepository;
 
@@ -31,68 +36,40 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
 
-        String authorizationHeader =
-                request.getHeader("Authorization");
+        String authorizationHeader = request.getHeader("Authorization");
 
-        // No JWT supplied
         if (authorizationHeader == null ||
                 !authorizationHeader.startsWith("Bearer ")) {
-
             filterChain.doFilter(request, response);
             return;
         }
 
-        String token =
-                authorizationHeader.substring(7).trim();
+        String token = authorizationHeader.substring(7).trim();
 
         try {
-
-            // Validate token
             if (!jwtService.isTokenValid(token)) {
-
-                System.out.println(
-                        "JWT DEBUG: Token is invalid"
-                );
-
+                log.debug("Rejected invalid JWT");
                 filterChain.doFilter(request, response);
                 return;
             }
 
-            // Extract user ID
-            String userId =
-                    jwtService.extractUserId(token);
+            UUID userId = UUID.fromString(jwtService.extractUserId(token));
 
-            System.out.println(
-                    "JWT DEBUG: User ID = " + userId
-            );
+            User user = userRepository.findById(userId).orElse(null);
 
-            UUID uuid =
-                    UUID.fromString(userId);
-
-            // Find user
-            User user =
-                    userRepository.findById(uuid)
-                            .orElse(null);
-
-            if (user == null) {
-
-                System.out.println(
-                        "JWT DEBUG: User not found"
-                );
-
+            if (user == null || !user.isEnabled()) {
+                log.debug("Rejected JWT for unavailable account");
                 filterChain.doFilter(request, response);
                 return;
             }
 
-            // Don't overwrite an existing authentication
             if (SecurityContextHolder
                     .getContext()
                     .getAuthentication() == null) {
 
                 var authorities = List.of(
                         new SimpleGrantedAuthority(
-                                "ROLE_" +
-                                        user.getRole().name()
+                                "ROLE_" + user.getRole().name()
                         )
                 );
 
@@ -106,21 +83,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 SecurityContextHolder
                         .getContext()
                         .setAuthentication(authentication);
-
-                System.out.println(
-                        "JWT DEBUG: Authentication set for "
-                                + user.getEmail()
-                );
             }
 
         } catch (Exception e) {
-
-            System.out.println(
-                    "JWT DEBUG: Authentication failed: "
-                            + e.getMessage()
-            );
-
-            e.printStackTrace();
+            log.debug("JWT authentication rejected");
         }
 
         filterChain.doFilter(request, response);
