@@ -9,6 +9,7 @@ import com.wavetransakt.user.repository.UserRepository;
 import com.wavetransakt.verification.service.VerificationService;
 import com.wavetransakt.wallet.service.WalletService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,9 @@ public class AuthService {
     private final JwtService jwtService;
     private final WalletService walletService;
     private final VerificationService verificationService;
+
+    @Value("${wave.demo.return-verification-code:false}")
+    private boolean returnVerificationCode;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -74,17 +78,13 @@ public class AuthService {
         String verificationCode =
                 verificationService.createEmailVerificationCode(user);
 
-        /*
-         * Controlled-start mode currently returns the verification code
-         * so the closed tester group can complete onboarding before an
-         * email/SMS provider is connected. Do not enable this behavior
-         * for a public production launch.
-         */
         return AuthResponse.builder()
                 .message(
                         "Registration successful. Please verify your email."
                 )
-                .verificationCode(verificationCode)
+                .verificationCode(
+                        returnVerificationCode ? verificationCode : null
+                )
                 .build();
     }
 
