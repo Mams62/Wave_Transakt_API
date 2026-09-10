@@ -35,14 +35,33 @@ public class AuthService {
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         String email = request.email().trim().toLowerCase();
+        String phone = normalizeNullable(request.phone());
+
         if (users.findByEmailIgnoreCase(email).isPresent()) {
             throw new IllegalArgumentException("An account with this email already exists");
+        }
+        if (phone != null && users.findByPhone(phone).isPresent()) {
+            throw new IllegalArgumentException("An account with this phone number already exists");
         }
 
         User user = new User();
         user.setEmail(email);
         user.setFullName((request.firstName().trim() + " " + request.lastName().trim()).trim());
+        user.setPhone(phone);
+        user.setState(normalizeNullable(request.state()));
+        user.setLocalGovernment(normalizeNullable(request.localGovernment()));
+        user.setDateOfBirth(request.dateOfBirth());
+        user.setGender(normalizeNullable(request.gender()));
         user.setPasswordHash(passwordEncoder.encode(request.password()));
+
+        String transactionPin = normalizeNullable(request.transactionPin());
+        if (transactionPin != null) {
+            user.setTransactionPinHash(passwordEncoder.encode(transactionPin));
+        }
+
+        // BVN and NIN are accepted in the registration contract for the KYC flow but are
+        // deliberately not persisted as plaintext user columns. They should be verified or
+        // tokenized by the approved KYC provider before any persistent storage is introduced.
         user.setWalletNumber(generateWalletNumber());
         user = users.save(user);
 
@@ -54,11 +73,13 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
-        String identifier = request.identifier().trim().toLowerCase();
-        User user = users.findByEmailIgnoreCase(identifier)
-                .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
+        String identifier = request.identifier().trim();
+        User user = users.findByEmailIgnoreCase(identifier.toLowerCase())
+                .or(() -> users.findByPhone(identifier))
+                .orElseThrow(() -> new BadCredentialsException("Invalid email/phone or password"));
+
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            throw new BadCredentialsException("Invalid email or password");
+            throw new BadCredentialsException("Invalid email/phone or password");
         }
         return new AuthResponse("Login successful", createToken(user));
     }
@@ -85,6 +106,12 @@ public class AuthService {
             number = "WT" + String.format("%010d", Math.abs(java.util.concurrent.ThreadLocalRandom.current().nextLong(1_000_000_000L, 9_999_999_999L)));
         } while (users.existsByWalletNumber(number));
         return number;
+    }
+
+    private String normalizeNullable(String value) {
+        if (value == null) return null;
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     public record AuthResponse(String message, String token) {}
