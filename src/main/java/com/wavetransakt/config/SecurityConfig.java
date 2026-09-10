@@ -17,7 +17,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtAuthenticationFilter
+            jwtAuthenticationFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(
@@ -25,40 +26,73 @@ public class SecurityConfig {
     ) throws Exception {
 
         http
-                .csrf(csrf -> csrf.disable())
-
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(
-                                SessionCreationPolicy.STATELESS
-                        )
+                .csrf(
+                        csrf ->
+                                csrf.disable()
                 )
 
-                .authorizeHttpRequests(auth -> auth
+                .sessionManagement(
+                        session ->
+                                session.sessionCreationPolicy(
+                                        SessionCreationPolicy.STATELESS
+                                )
+                )
 
-                        .requestMatchers(
-                                "/",
-                                "/error",
-                                "/api/health"
-                        ).permitAll()
+                .authorizeHttpRequests(
+                        auth -> auth
 
-                        // Must require authentication.
-                        .requestMatchers(
-                                "/api/auth/me"
-                        ).authenticated()
+                                /*
+                                 * Basic public endpoints.
+                                 */
+                                .requestMatchers(
+                                        "/",
+                                        "/error",
+                                        "/api/health"
+                                )
+                                .permitAll()
 
-                        // Public authentication routes.
-                        .requestMatchers(
-                                "/api/auth/register",
-                                "/api/auth/login"
-                        ).permitAll()
+                                /*
+                                 * Paystack cannot send a Wave Transakt JWT.
+                                 *
+                                 * Authentication for this ONE endpoint
+                                 * is performed using Paystack's HMAC-SHA512
+                                 * webhook signature.
+                                 */
+                                .requestMatchers(
+                                        "/api/v1/payments/webhook/paystack"
+                                )
+                                .permitAll()
 
-                        // Email verification remains public.
-                        .requestMatchers(
-                                "/api/verification/**"
-                        ).permitAll()
+                                /*
+                                 * Authenticated profile.
+                                 */
+                                .requestMatchers(
+                                        "/api/auth/me"
+                                )
+                                .authenticated()
 
-                        // All remaining endpoints require JWT.
-                        .anyRequest().authenticated()
+                                /*
+                                 * Public authentication endpoints.
+                                 */
+                                .requestMatchers(
+                                        "/api/auth/register",
+                                        "/api/auth/login"
+                                )
+                                .permitAll()
+
+                                /*
+                                 * Email verification.
+                                 */
+                                .requestMatchers(
+                                        "/api/verification/**"
+                                )
+                                .permitAll()
+
+                                /*
+                                 * EVERYTHING ELSE requires JWT.
+                                 */
+                                .anyRequest()
+                                .authenticated()
                 )
 
                 .addFilterBefore(
@@ -71,6 +105,7 @@ public class SecurityConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
+
         return new BCryptPasswordEncoder();
     }
 }

@@ -28,10 +28,8 @@ public class PaymentSettlementService {
             ledgerService;
 
     /**
-     * Atomically settle one VERIFIED Paystack payment.
-     *
-     * The Paystack HTTP request has already completed
-     * before entering this method.
+     * Settlement initiated by an authenticated client
+     * after calling Paystack's verify endpoint.
      */
     @Transactional
     public String settleSuccessfulPaystackPayment(
@@ -44,10 +42,58 @@ public class PaymentSettlementService {
     ) {
 
         if (authenticatedUserId == null) {
+
             throw new IllegalArgumentException(
                     "Authenticated user is required"
             );
         }
+
+        return settle(
+                authenticatedUserId,
+                true,
+                reference,
+                providerTransactionId,
+                verifiedAmount,
+                currency,
+                providerResponse
+        );
+    }
+
+    /**
+     * Settlement initiated by a verified Paystack webhook.
+     *
+     * No JWT user is required because webhook authenticity
+     * is established using Paystack's HMAC signature.
+     */
+    @Transactional
+    public String settleSuccessfulPaystackWebhook(
+            String reference,
+            String providerTransactionId,
+            BigDecimal verifiedAmount,
+            String currency,
+            String providerResponse
+    ) {
+
+        return settle(
+                null,
+                false,
+                reference,
+                providerTransactionId,
+                verifiedAmount,
+                currency,
+                providerResponse
+        );
+    }
+
+    private String settle(
+            UUID authenticatedUserId,
+            boolean enforceUserOwnership,
+            String reference,
+            String providerTransactionId,
+            BigDecimal verifiedAmount,
+            String currency,
+            String providerResponse
+    ) {
 
         if (reference == null ||
                 reference.isBlank()) {
@@ -61,7 +107,7 @@ public class PaymentSettlementService {
                 providerTransactionId.isBlank()) {
 
             throw new IllegalArgumentException(
-                    "Paystack transaction ID is missing"
+                    "Paystack transaction ID is required"
             );
         }
 
@@ -75,13 +121,18 @@ public class PaymentSettlementService {
             );
         }
 
+        if (currency == null ||
+                currency.isBlank()) {
+
+            throw new IllegalArgumentException(
+                    "Payment currency is required"
+            );
+        }
+
         /*
-         * ========================================================
+         * --------------------------------------------------------
          * LOCK PAYMENT TRANSACTION
-         * ========================================================
-         *
-         * Two simultaneous verification requests for the same
-         * payment cannot pass this section concurrently.
+         * --------------------------------------------------------
          */
         PaymentTransaction transaction =
                 paymentTransactionRepository
@@ -94,36 +145,33 @@ public class PaymentSettlementService {
                                 )
                         );
 
-        if (!transaction
-                .getUser()
-                .getId()
-                .equals(
-                        authenticatedUserId
-                )) {
+        if (!"PAYSTACK".equalsIgnoreCase(
+                transaction.getProvider()
+        )) {
 
             throw new IllegalArgumentException(
-                    "You are not authorized to verify this transaction"
+                    "Payment provider mismatch"
             );
         }
 
-        /*
-         * Another request may have completed while this
-         * request waited for the lock.
-         */
-        if (transaction.getStatus() ==
-                PaymentTransactionStatus.SUCCESSFUL) {
+        if (enforceUserOwnership) {
 
-            return """
-                    {
-                      "message": "Payment already processed",
-                      "reference": "%s",
-                      "status": "SUCCESSFUL"
-                    }
-                    """.formatted(reference);
+            if (!transaction
+                    .getUser()
+                    .getId()
+                    .equals(
+                            authenticatedUserId
+                    )) {
+
+                throw new IllegalArgumentException(
+                        "You are not authorized to verify this transaction"
+                );
+            }
         }
 
         /*
-         * Validate against OUR stored transaction again.
+         * Always validate amount and currency even during
+         * an idempotent replay.
          */
         if (verifiedAmount.compareTo(
                 transaction.getAmount()
@@ -146,8 +194,35 @@ public class PaymentSettlementService {
         }
 
         /*
-         * Prevent one Paystack provider transaction ID
-         * from funding two local PaymentTransactions.
+         * Another verification request or webhook may have
+         * completed while this caller waited for the row lock.
+         */
+        if (transaction.getStatus() ==
+                PaymentTransactionStatus.SUCCESSFUL) {
+
+            String existingProviderId =
+                    transaction
+                            .getProviderTransactionId();
+
+            if (existingProviderId == null ||
+                    !existingProviderId.equals(
+                            providerTransactionId
+                    )) {
+
+                throw new IllegalStateException(
+                        "Successful payment provider transaction mismatch"
+                );
+            }
+
+            return alreadyProcessedResponse(
+                    reference
+            );
+        }
+
+        /*
+         * Provider transaction IDs are globally unique.
+         *
+         * V23 also enforces this at database level.
          */
         paymentTransactionRepository
                 .findByProviderTransactionId(
@@ -168,11 +243,10 @@ public class PaymentSettlementService {
                 });
 
         /*
-         * ========================================================
+         * --------------------------------------------------------
          * LOCK WALLET
-         * ========================================================
+         * --------------------------------------------------------
          */
-
         UUID walletId =
                 transaction
                         .getWallet()
@@ -204,11 +278,11 @@ public class PaymentSettlementService {
             );
         }
 
-        if (!wallet
-                .getCurrency()
-                .equalsIgnoreCase(
-                        currency
-                )) {
+        if (wallet.getCurrency() == null ||
+                !wallet.getCurrency()
+                        .equalsIgnoreCase(
+                                currency
+                        )) {
 
             throw new IllegalArgumentException(
                     "Wallet currency mismatch"
@@ -216,16 +290,13 @@ public class PaymentSettlementService {
         }
 
         /*
-         * ========================================================
-         * DOUBLE-ENTRY LEDGER
-         * ========================================================
+         * --------------------------------------------------------
+         * DOUBLE ENTRY
+         * --------------------------------------------------------
          *
-         * For ₦10,000 funding:
-         *
-         * DEBIT  Paystack Settlement Asset    ₦10,000
-         * CREDIT User Wallet Liability        ₦10,000
+         * DEBIT  Paystack Settlement Asset
+         * CREDIT User Wallet Liability
          */
-
         String ledgerReference =
                 "PAYSTACK:" +
                         transaction.getId();
@@ -240,11 +311,8 @@ public class PaymentSettlementService {
         );
 
         /*
-         * ========================================================
-         * BALANCE PROJECTION
-         * ========================================================
+         * wallet.balance remains the fast projection.
          */
-
         wallet.setBalance(
                 wallet.getBalance()
                         .add(
@@ -252,11 +320,13 @@ public class PaymentSettlementService {
                         )
         );
 
-        walletRepository.save(wallet);
+        walletRepository.save(
+                wallet
+        );
 
         /*
-         * Mark successful only after ledger and wallet
-         * projection have both been written.
+         * Payment becomes successful only after the ledger
+         * and balance projection have both succeeded.
          */
         transaction.setProviderTransactionId(
                 providerTransactionId
@@ -271,5 +341,18 @@ public class PaymentSettlementService {
         );
 
         return providerResponse;
+    }
+
+    private String alreadyProcessedResponse(
+            String reference
+    ) {
+
+        return """
+                {
+                  "message": "Payment already processed",
+                  "reference": "%s",
+                  "status": "SUCCESSFUL"
+                }
+                """.formatted(reference);
     }
 }
