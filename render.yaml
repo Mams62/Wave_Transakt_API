@@ -1,0 +1,47 @@
+services:
+  - type: web
+    name: wave-transakt-api-staging
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: controlled-start-api-20260910
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: WAVE_DB_HOST
+        fromDatabase:
+          name: wave-transakt-staging-db
+          property: host
+      - key: WAVE_DB_PORT
+        value: "5432"
+      - key: WAVE_DB_NAME
+        fromDatabase:
+          name: wave-transakt-staging-db
+          property: database
+      - key: WAVE_DB_USERNAME
+        fromDatabase:
+          name: wave-transakt-staging-db
+          property: user
+      - key: WAVE_DB_PASSWORD
+        fromDatabase:
+          name: wave-transakt-staging-db
+          property: password
+      - key: WAVE_JWT_SECRET
+        generateValue: true
+      - key: WAVE_JWT_EXPIRATION
+        value: "86400000"
+      - key: WAVE_SQL_LOGGING
+        value: "false"
+      - key: WAVE_PAYSTACK_PUBLIC_KEY
+        sync: false
+      - key: WAVE_PAYSTACK_SECRET_KEY
+        sync: false
+
+databases:
+  - name: wave-transakt-staging-db
+    plan: free
+    region: frankfurt
+    databaseName: wave_transakt_staging
+    user: wave_transakt
+    postgresMajorVersion: "17"
+    ipAllowList: []
