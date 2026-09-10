@@ -32,6 +32,8 @@ services:
         value: "86400000"
       - key: WAVE_SQL_LOGGING
         value: "false"
+      - key: WAVE_RETURN_VERIFICATION_CODE
+        value: "true"
       - key: WAVE_PAYSTACK_PUBLIC_KEY
         sync: false
       - key: WAVE_PAYSTACK_SECRET_KEY
