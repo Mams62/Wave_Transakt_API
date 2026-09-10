@@ -31,6 +31,12 @@ public class WemaWalletClient {
     @Value("${wema.base-url:https://playground.azure-api.net}")
     private String baseUrl;
 
+    /**
+     * Some ALAT Playground subscriptions expose an API-management subscription
+     * key in addition to Wema's documented x-api-key. It is optional here: the
+     * official Wallet Services contract requires x-api-key, while this header is
+     * sent only when Wema has issued one for the subscribed product.
+     */
     @Value("${wema.wallet-subscription-key:}")
     private String subscriptionKey;
 
@@ -74,7 +80,7 @@ public class WemaWalletClient {
         if (trackingId.isBlank()) {
             throw new IllegalStateException(
                     "Wema accepted the wallet request but did not return a tracking ID. " +
-                            "Check the Wema channel callback/profile configuration."
+                            "Check the Wema channel profile for Wallet Creation."
             );
         }
 
@@ -120,10 +126,14 @@ public class WemaWalletClient {
     public PartnershipAccountDetails getPartnershipAccountDetails(String phoneNumber) {
         requireCredentials();
 
+        if (phoneNumber == null || phoneNumber.isBlank()) {
+            throw new IllegalArgumentException("Phone number is required");
+        }
+
         String url = UriComponentsBuilder
                 .fromHttpUrl(normalizedBaseUrl() +
                         "/wallet-creation/api/CustomerAccount/GetPartnershipAccountDetails")
-                .queryParam("phoneNumber", phoneNumber)
+                .queryParam("phoneNumber", phoneNumber.trim())
                 .build(true)
                 .toUriString();
 
@@ -191,16 +201,17 @@ public class WemaWalletClient {
     }
 
     private JsonNode post(String path, Object body) {
-        String url = normalizedBaseUrl() + path;
-        return exchange(url, HttpMethod.POST, body);
+        return exchange(normalizedBaseUrl() + path, HttpMethod.POST, body);
     }
 
     private JsonNode exchange(String url, HttpMethod method, Object body) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setCacheControl(CacheControl.noCache());
-        headers.set(SUBSCRIPTION_HEADER, subscriptionKey.trim());
         headers.set(API_KEY_HEADER, apiKey.trim());
+        if (subscriptionKey != null && !subscriptionKey.isBlank()) {
+            headers.set(SUBSCRIPTION_HEADER, subscriptionKey.trim());
+        }
 
         HttpEntity<?> entity = body == null
                 ? new HttpEntity<>(headers)
@@ -239,8 +250,8 @@ public class WemaWalletClient {
         String statusText = statusNode.isTextual()
                 ? statusNode.asText("").trim()
                 : "";
-        if (!statusText.isBlank() &&
-                statusText.equalsIgnoreCase("FAILED")) {
+        if ("FAILED".equalsIgnoreCase(statusText) ||
+                "FAILURE".equalsIgnoreCase(statusText)) {
             throw new IllegalArgumentException(message(response, fallback));
         }
     }
@@ -292,11 +303,6 @@ public class WemaWalletClient {
     }
 
     private void requireCredentials() {
-        if (subscriptionKey == null || subscriptionKey.isBlank()) {
-            throw new IllegalStateException(
-                    "Wema Wallet Services subscription key is not configured on the server"
-            );
-        }
         if (apiKey == null || apiKey.isBlank()) {
             throw new IllegalStateException(
                     "Wema x-api-key is not configured on the server"
