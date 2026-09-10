@@ -36,6 +36,14 @@ services:
         sync: false
       - key: WAVE_PAYSTACK_SECRET_KEY
         sync: false
+      - key: WAVE_VTPASS_BASE_URL
+        value: "https://sandbox.vtpass.com/api/"
+      - key: WAVE_VTPASS_API_KEY
+        sync: false
+      - key: WAVE_VTPASS_PUBLIC_KEY
+        sync: false
+      - key: WAVE_VTPASS_SECRET_KEY
+        sync: false
 
 databases:
   - name: wave-transakt-staging-db
