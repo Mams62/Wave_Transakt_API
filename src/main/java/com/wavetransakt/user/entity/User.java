@@ -4,6 +4,7 @@ import com.wavetransakt.wallet.entity.Wallet;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -48,6 +49,21 @@ public class User {
 
     @Column(unique = true, length = 20)
     private String nin;
+
+    @Column(length = 80)
+    private String state;
+
+    @Column(name = "local_government", length = 100)
+    private String localGovernment;
+
+    @Column(name = "date_of_birth")
+    private LocalDate dateOfBirth;
+
+    @Column(length = 30)
+    private String gender;
+
+    @Column(name = "transaction_pin_hash", length = 100)
+    private String transactionPinHash;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
@@ -102,5 +118,9 @@ public class User {
 
     public boolean isEnabled() {
         return accountStatus == AccountStatus.ACTIVE;
+    }
+
+    public String getFullName() {
+        return (firstName + " " + lastName).trim();
     }
 }
