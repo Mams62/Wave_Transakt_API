@@ -6,44 +6,43 @@ import com.wavetransakt.payment.dto.VerifyPaymentRequest;
 import com.wavetransakt.payment.service.PaystackService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * Legacy Paystack controller kept only for rollback/reference during the Wema
+ * migration. It is disabled unless explicitly re-enabled with
+ * wave.legacy.paystack-enabled=true.
+ */
 @RestController
 @RequestMapping("/api/v1/payments")
 @RequiredArgsConstructor
+@ConditionalOnProperty(
+        prefix = "wave.legacy",
+        name = "paystack-enabled",
+        havingValue = "true"
+)
 public class PaymentController {
 
-    private final PaystackService
-            paystackService;
+    private final PaystackService paystackService;
 
     @PostMapping("/initialize")
     public ResponseEntity<PaymentResponse> initializePayment(
-            @Valid
-            @RequestBody
-            InitializePaymentRequest request,
-
+            @Valid @RequestBody InitializePaymentRequest request,
             Authentication authentication
     ) {
-
         return ResponseEntity.ok(
-                paystackService.initializeTransaction(
-                        request,
-                        authentication
-                )
+                paystackService.initializeTransaction(request, authentication)
         );
     }
 
     @PostMapping("/verify")
     public ResponseEntity<PaymentResponse> verifyPayment(
-            @Valid
-            @RequestBody
-            VerifyPaymentRequest request,
-
+            @Valid @RequestBody VerifyPaymentRequest request,
             Authentication authentication
     ) {
-
         return ResponseEntity.ok(
                 paystackService.verifyTransaction(
                         request.getReference(),
@@ -54,17 +53,11 @@ public class PaymentController {
 
     @GetMapping("/verify/{reference}")
     public ResponseEntity<PaymentResponse> verify(
-            @PathVariable
-            String reference,
-
+            @PathVariable String reference,
             Authentication authentication
     ) {
-
         return ResponseEntity.ok(
-                paystackService.verifyTransaction(
-                        reference,
-                        authentication
-                )
+                paystackService.verifyTransaction(reference, authentication)
         );
     }
 }
