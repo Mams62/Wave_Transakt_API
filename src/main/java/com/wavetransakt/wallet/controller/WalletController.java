@@ -2,59 +2,40 @@ package com.wavetransakt.wallet.controller;
 
 import com.wavetransakt.user.entity.User;
 import com.wavetransakt.wallet.dto.WalletResponse;
-import com.wavetransakt.wallet.service.WalletService;
+import com.wavetransakt.wallet.service.WemaWalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.UUID;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/wallet")
 @RequiredArgsConstructor
 public class WalletController {
 
-    private final WalletService walletService;
+    private final WemaWalletService wemaWalletService;
 
     /**
      * Return the authenticated user's wallet.
+     *
+     * For this controlled build, Wema is the external wallet provider. Once a
+     * Wema NUBAN exists, the displayed available balance is refreshed from Wema
+     * rather than created locally.
      */
     @GetMapping
     public ResponseEntity<WalletResponse> getWallet(
             Authentication authentication
     ) {
-
         if (authentication == null ||
-                !authentication.isAuthenticated()) {
-
-            return ResponseEntity
-                    .status(401)
-                    .build();
+                !authentication.isAuthenticated() ||
+                !(authentication.getPrincipal() instanceof User user)) {
+            return ResponseEntity.status(401).build();
         }
-
-        Object principal =
-                authentication.getPrincipal();
-
-        if (!(principal instanceof User user)) {
-
-            return ResponseEntity
-                    .status(401)
-                    .build();
-        }
-
-        UUID userId = user.getId();
 
         return ResponseEntity.ok(
-                walletService.getWallet(userId)
+                wemaWalletService.getWallet(user.getId())
         );
     }
-
-    /*
-     * Direct wallet funding has intentionally been removed.
-     *
-     * Wallet value must only be created after a verified
-     * funding provider event such as Paystack/Wema and must
-     * also be represented in the double-entry ledger.
-     */
 }
