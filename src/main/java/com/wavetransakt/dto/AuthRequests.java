@@ -16,8 +16,12 @@ public final class AuthRequests {
             @NotBlank String email,
             @NotBlank @Size(min = 8, max = 128) String password,
             @Size(max = 20) String phone,
-            @Pattern(regexp = "^$|\\d{11}$", message = "BVN must be 11 digits") String bvn,
-            @Pattern(regexp = "^$|\\d{11}$", message = "NIN must be 11 digits") String nin,
+            @NotBlank
+            @Pattern(regexp = "\\d{11}", message = "BVN must be exactly 11 digits")
+            String bvn,
+            @NotBlank
+            @Pattern(regexp = "\\d{11}", message = "NIN must be exactly 11 digits")
+            String nin,
             @Size(max = 80) String state,
             @Size(max = 100) String localGovernment,
             @Past LocalDate dateOfBirth,
