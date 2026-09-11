@@ -33,8 +33,8 @@ jwt:
   secret: ${WAVE_JWT_SECRET}
   expiration: ${WAVE_JWT_EXPIRATION:86400000}
 
-# Legacy Paystack code remains compile-time compatible only. It is disabled by
-# the controlled-start feature flag below and is not exposed in the Wema UI.
+# Legacy Paystack code remains compile-time compatible only. Its controllers are
+# disabled by wave.legacy.paystack-enabled unless explicitly re-enabled.
 paystack:
   public-key: ${WAVE_PAYSTACK_PUBLIC_KEY:}
   secret-key: ${WAVE_PAYSTACK_SECRET_KEY:}
@@ -70,8 +70,8 @@ wave:
     return-verification-code: ${WAVE_RETURN_VERIFICATION_CODE:false}
 
   # Paystack is no longer the wallet provider in this controlled build.
-  paystack:
-    enabled: ${WAVE_PAYSTACK_ENABLED:false}
+  legacy:
+    paystack-enabled: ${WAVE_LEGACY_PAYSTACK_ENABLED:false}
 
   # Old Wave-to-Wave ledger transfers must not mutate a local projection while
   # the user-facing balance is sourced from Wema. Enable only after a Wema debit
