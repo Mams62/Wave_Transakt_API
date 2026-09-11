@@ -4,20 +4,18 @@ services:
     runtime: docker
     plan: free
     region: frankfurt
+    repo: https://github.com/Mams62/Wave_Transakt_API.git
     branch: controlled-start-api-20260910
     healthCheckPath: /api/health
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
-      - key: WAVE_DB_HOST
+      # Spring Boot reads WAVE_DB_URL directly. Bind it to Render Postgres's
+      # private connection string so the controlled stage always uses the
+      # staging database provisioned by this Blueprint.
+      - key: WAVE_DB_URL
         fromDatabase:
           name: wave-transakt-staging-db
-          property: host
-      - key: WAVE_DB_PORT
-        value: "5432"
-      - key: WAVE_DB_NAME
-        fromDatabase:
-          name: wave-transakt-staging-db
-          property: database
+          property: connectionString
       - key: WAVE_DB_USERNAME
         fromDatabase:
           name: wave-transakt-staging-db
@@ -26,17 +24,28 @@ services:
         fromDatabase:
           name: wave-transakt-staging-db
           property: password
+
       - key: WAVE_JWT_SECRET
         generateValue: true
       - key: WAVE_JWT_EXPIRATION
         value: "86400000"
       - key: WAVE_SQL_LOGGING
         value: "false"
+      - key: WAVE_LOG_LEVEL
+        value: "INFO"
       - key: WAVE_RETURN_VERIFICATION_CODE
         value: "true"
 
+      # Keep all legacy/local money movement disabled in the controlled stage
+      # while Wema is the source-of-funds provider.
+      - key: WAVE_LEGACY_PAYSTACK_ENABLED
+        value: "false"
+      - key: WAVE_LOCAL_MONEY_MOVEMENT_ENABLED
+        value: "false"
+      - key: WAVE_SERVICE_PAYMENTS_ENABLED
+        value: "false"
+
       # Wema Wallet Services / account onboarding.
-      # Calls go to the Playground API gateway, not a developer-portal host.
       - key: WAVE_WEMA_WALLET_BASE_URL
         value: "https://playground.azure-api.net"
       - key: WAVE_WEMA_WALLET_SUBSCRIPTION_KEY
@@ -44,8 +53,7 @@ services:
       - key: WAVE_WEMA_WALLET_API_KEY
         sync: false
 
-      # Wema Wallet Transfer / bank-transfer APIs are exposed from a separate
-      # APIM developer gateway and therefore use a separate subscription key.
+      # Wema Wallet Transfer / bank-transfer APIs use a separate APIM gateway.
       - key: WAVE_WEMA_TRANSFER_BASE_URL
         value: "https://wema-alatdev-apimgt.azure-api.net"
       - key: WAVE_WEMA_TRANSFER_SUBSCRIPTION_KEY
@@ -56,12 +64,10 @@ services:
         sync: false
       - key: WAVE_WEMA_TRANSFER_SALT
         sync: false
-
-      # Used only by Wema products/endpoints that issue a separate access value.
       - key: WAVE_WEMA_ACCESS_KEY
         sync: false
 
-      # VTpass remains sandbox-only for the controlled services catalog/payment tests.
+      # VTpass remains sandbox-only during controlled testing.
       - key: WAVE_VTPASS_BASE_URL
         value: "https://sandbox.vtpass.com/api/"
       - key: WAVE_VTPASS_API_KEY
