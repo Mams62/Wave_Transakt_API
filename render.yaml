@@ -9,10 +9,20 @@ services:
     healthCheckPath: /api/health
     autoDeployTrigger: commit
     envVars:
-      - key: WAVE_DB_URL
+      # Spring/JDBC needs a jdbc:postgresql URL. Keep Render Postgres values
+      # split so application.yml can safely assemble the JDBC URL.
+      - key: WAVE_DB_HOST
         fromDatabase:
           name: wave-transakt-staging-db
-          property: connectionString
+          property: host
+      - key: WAVE_DB_PORT
+        fromDatabase:
+          name: wave-transakt-staging-db
+          property: port
+      - key: WAVE_DB_NAME
+        fromDatabase:
+          name: wave-transakt-staging-db
+          property: database
       - key: WAVE_DB_USERNAME
         fromDatabase:
           name: wave-transakt-staging-db
@@ -21,6 +31,7 @@ services:
         fromDatabase:
           name: wave-transakt-staging-db
           property: password
+
       - key: WAVE_JWT_SECRET
         generateValue: true
       - key: WAVE_JWT_EXPIRATION
@@ -31,18 +42,22 @@ services:
         value: "INFO"
       - key: WAVE_RETURN_VERIFICATION_CODE
         value: "true"
+
+      # Controlled-stage safety switches. Wema remains the wallet source of funds.
       - key: WAVE_LEGACY_PAYSTACK_ENABLED
         value: "false"
       - key: WAVE_LOCAL_MONEY_MOVEMENT_ENABLED
         value: "false"
       - key: WAVE_SERVICE_PAYMENTS_ENABLED
         value: "false"
+
       - key: WAVE_WEMA_WALLET_BASE_URL
         value: "https://playground.azure-api.net"
       - key: WAVE_WEMA_WALLET_SUBSCRIPTION_KEY
         sync: false
       - key: WAVE_WEMA_WALLET_API_KEY
         sync: false
+
       - key: WAVE_WEMA_TRANSFER_BASE_URL
         value: "https://wema-alatdev-apimgt.azure-api.net"
       - key: WAVE_WEMA_TRANSFER_SUBSCRIPTION_KEY
@@ -55,6 +70,7 @@ services:
         sync: false
       - key: WAVE_WEMA_ACCESS_KEY
         sync: false
+
       - key: WAVE_VTPASS_BASE_URL
         value: "https://sandbox.vtpass.com/api/"
       - key: WAVE_VTPASS_API_KEY
