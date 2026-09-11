@@ -33,21 +33,22 @@ jwt:
   secret: ${WAVE_JWT_SECRET}
   expiration: ${WAVE_JWT_EXPIRATION:86400000}
 
-# Legacy Paystack code remains compile-time compatible only. No Render Paystack
-# secrets are required for the Wema-controlled staging flow.
+# Legacy Paystack code remains compile-time compatible only. It is disabled by
+# the controlled-start feature flag below and is not exposed in the Wema UI.
 paystack:
   public-key: ${WAVE_PAYSTACK_PUBLIC_KEY:}
   secret-key: ${WAVE_PAYSTACK_SECRET_KEY:}
 
 wema:
-  # Wema publishes wallet/account-creation and transfer products through
-  # different Azure API Management gateways in the developer environment.
-  # Do not use the *.developer.azure-api.net portal hostname for API calls.
+  # Wallet creation and wallet account management are published through the
+  # Playground API gateway. Do not use the developer-portal hostname here.
   wallet:
     base-url: ${WAVE_WEMA_WALLET_BASE_URL:https://playground.azure-api.net}
     subscription-key: ${WAVE_WEMA_WALLET_SUBSCRIPTION_KEY:}
     api-key: ${WAVE_WEMA_WALLET_API_KEY:}
 
+  # Wema bank-transfer products may be issued through a separate APIM gateway
+  # and may use credentials distinct from Wallet Services.
   transfer:
     base-url: ${WAVE_WEMA_TRANSFER_BASE_URL:https://wema-alatdev-apimgt.azure-api.net}
     subscription-key: ${WAVE_WEMA_TRANSFER_SUBSCRIPTION_KEY:}
@@ -67,6 +68,21 @@ vtpass:
 wave:
   demo:
     return-verification-code: ${WAVE_RETURN_VERIFICATION_CODE:false}
+
+  # Paystack is no longer the wallet provider in this controlled build.
+  paystack:
+    enabled: ${WAVE_PAYSTACK_ENABLED:false}
+
+  # Old Wave-to-Wave ledger transfers must not mutate a local projection while
+  # the user-facing balance is sourced from Wema. Enable only after a Wema debit
+  # and settlement path has been wired and tested end to end.
+  wallet:
+    local-money-movement-enabled: ${WAVE_LOCAL_MONEY_MOVEMENT_ENABLED:false}
+
+  # Catalog browsing remains enabled, but VTpass purchases stay paused until
+  # service settlement debits the Wema wallet rather than the legacy projection.
+  services:
+    provider-payments-enabled: ${WAVE_SERVICE_PAYMENTS_ENABLED:false}
 
 management:
   endpoints:
