@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -32,6 +33,7 @@ public class WalletController {
     }
 
     @GetMapping("/wallet")
+    @Transactional(readOnly = true)
     public ResponseEntity<WalletResponse> wallet(@AuthenticationPrincipal Jwt jwt) {
         UUID userId = authenticatedUserId(jwt);
         Wallet wallet = wallets.findByUserId(userId)
@@ -47,6 +49,7 @@ public class WalletController {
     }
 
     @GetMapping("/transactions")
+    @Transactional(readOnly = true)
     public ResponseEntity<List<TransactionResponse>> transactions(@AuthenticationPrincipal Jwt jwt) {
         UUID userId = authenticatedUserId(jwt);
         List<TransactionResponse> response = transactions
