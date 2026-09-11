@@ -3,6 +3,7 @@ package com.wavetransakt.wallet.service;
 import com.wavetransakt.user.entity.User;
 import com.wavetransakt.user.repository.UserRepository;
 import com.wavetransakt.wallet.dto.WalletResponse;
+import com.wavetransakt.wallet.dto.WemaDiagnosticsResponse;
 import com.wavetransakt.wallet.dto.WemaWalletActionResponse;
 import com.wavetransakt.wallet.entity.Wallet;
 import com.wavetransakt.wallet.entity.WemaWalletStatus;
@@ -32,6 +33,8 @@ public class WemaWalletService {
         if (wallet.getProviderAccountNumber() != null &&
                 !wallet.getProviderAccountNumber().isBlank()) {
             wallet.setProviderStatus(WemaWalletStatus.ACTIVE);
+            wallet.setProviderLastSyncedAt(LocalDateTime.now());
+            walletRepository.save(wallet);
             return response(wallet, "Wema wallet is already active");
         }
 
@@ -44,7 +47,15 @@ public class WemaWalletService {
             );
         }
 
-        WemaWalletClient.StartResult result = wemaWalletClient.startNinWallet(user);
+        if (wallet.getProviderStatus() == WemaWalletStatus.PENDING) {
+            return response(
+                    wallet,
+                    "Wema wallet creation is already pending. Use Check Wema account status instead of starting again."
+            );
+        }
+
+        WemaWalletClient.StartResult result =
+                wemaWalletClient.startNinWallet(user);
 
         wallet.setProvider("WEMA");
         wallet.setProviderTrackingId(result.trackingId());
@@ -69,11 +80,12 @@ public class WemaWalletService {
             );
         }
 
-        WemaWalletClient.ProviderMessage result = wemaWalletClient.validateNinOtp(
-                user.getPhone(),
-                wallet.getProviderTrackingId(),
-                otp
-        );
+        WemaWalletClient.ProviderMessage result =
+                wemaWalletClient.validateNinOtp(
+                        user.getPhone(),
+                        wallet.getProviderTrackingId(),
+                        otp
+                );
 
         wallet.setProviderStatus(WemaWalletStatus.PENDING);
         wallet.setProviderMessage(result.message());
@@ -100,6 +112,13 @@ public class WemaWalletService {
             return response(wallet, "Wema wallet onboarding has not started");
         }
 
+        if (wallet.getProviderStatus() == WemaWalletStatus.OTP_REQUIRED) {
+            return response(
+                    wallet,
+                    "Wema is waiting for OTP validation before account generation can begin."
+            );
+        }
+
         WemaWalletClient.PartnershipAccountDetails details =
                 wemaWalletClient.getPartnershipAccountDetails(user.getPhone());
 
@@ -110,7 +129,7 @@ public class WemaWalletService {
             String accountNumber = details.accountNumber().trim();
             if (!accountNumber.matches("\\d{10}")) {
                 throw new IllegalStateException(
-                        "Wema returned an invalid wallet account number"
+                        "Wema returned an invalid 10-digit wallet account number"
                 );
             }
 
@@ -126,17 +145,25 @@ public class WemaWalletService {
 
     /**
      * User-facing wallet response. Wema is the balance source once a provider
-     * account has been created. A provider failure is never silently presented
-     * as a fresh zero balance.
+     * account has been created. The onboarding state and the bank's live account
+     * status are deliberately kept separate.
      */
     @Transactional(readOnly = true)
     public WalletResponse getWallet(UUID userId) {
         Wallet wallet = requireWallet(userId);
 
-        BigDecimal visibleBalance = wallet.getBalance();
-        boolean balanceFresh = false;
+        String onboardingStatus = wallet.getProviderStatus().name();
+        String accountStatus = null;
         String providerMessage = wallet.getProviderMessage();
-        String providerStatus = wallet.getProviderStatus().name();
+        boolean balanceFresh = false;
+
+        // Before Wema assigns a NUBAN, the local zero projection is harmless and
+        // simply represents that no bank wallet is available yet. Once a NUBAN
+        // exists, never display an old local projection as if it were fresh Wema
+        // money when the provider refresh fails.
+        BigDecimal visibleBalance = wallet.getProviderAccountNumber() == null
+                ? wallet.getBalance()
+                : BigDecimal.ZERO;
 
         String accountNumber = wallet.getProviderAccountNumber();
         if (accountNumber != null && !accountNumber.isBlank()) {
@@ -145,11 +172,10 @@ public class WemaWalletService {
                         wemaWalletClient.getWalletDetails(accountNumber);
                 visibleBalance = details.availableBalance();
                 balanceFresh = true;
-                if (details.walletStatus() != null && !details.walletStatus().isBlank()) {
-                    providerStatus = details.walletStatus().trim();
-                }
+                accountStatus = blankToNull(details.walletStatus());
             } catch (Exception e) {
-                providerMessage = "Wema balance is temporarily unavailable. Pull to refresh before making a payment.";
+                providerMessage =
+                        "Wema balance is temporarily unavailable. Refresh before making a payment.";
             }
         }
 
@@ -162,11 +188,32 @@ public class WemaWalletService {
                 .provider("WEMA")
                 .bankName("Wema Bank")
                 .accountNumber(accountNumber)
-                .providerStatus(providerStatus)
+                .providerStatus(onboardingStatus)
+                .onboardingStatus(onboardingStatus)
+                .accountStatus(accountStatus)
                 .providerMessage(providerMessage)
-                .onboardingRequired(wallet.getProviderStatus() != WemaWalletStatus.ACTIVE)
+                .onboardingRequired(
+                        wallet.getProviderStatus() != WemaWalletStatus.ACTIVE
+                )
                 .balanceFresh(balanceFresh)
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public WemaDiagnosticsResponse diagnostics(UUID userId) {
+        Wallet wallet = requireWallet(userId);
+        WemaWalletClient.Diagnostics provider = wemaWalletClient.diagnostics();
+
+        return new WemaDiagnosticsResponse(
+                provider.gatewayHost(),
+                provider.gatewayLooksValid(),
+                provider.apiKeyConfigured(),
+                provider.subscriptionKeyConfigured(),
+                wallet.getProviderStatus().name(),
+                wallet.getProviderAccountNumber() != null &&
+                        !wallet.getProviderAccountNumber().isBlank(),
+                wallet.getProviderLastSyncedAt()
+        );
     }
 
     private User requireUser(UUID userId) {
@@ -174,19 +221,32 @@ public class WemaWalletService {
             throw new IllegalArgumentException("User is required");
         }
         return userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() ->
+                        new IllegalArgumentException("User not found")
+                );
     }
 
     private Wallet requireWallet(UUID userId) {
         return walletRepository.findByUserId(userId)
-                .orElseThrow(() -> new IllegalArgumentException("Wallet not found"));
+                .orElseThrow(() ->
+                        new IllegalArgumentException("Wallet not found")
+                );
     }
 
-    private WemaWalletActionResponse response(Wallet wallet, String message) {
+    private WemaWalletActionResponse response(
+            Wallet wallet,
+            String message
+    ) {
         return new WemaWalletActionResponse(
                 wallet.getProviderStatus().name(),
                 message,
                 wallet.getProviderAccountNumber()
         );
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank()
+                ? null
+                : value.trim();
     }
 }
