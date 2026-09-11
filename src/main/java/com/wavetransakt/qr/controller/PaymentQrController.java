@@ -6,6 +6,7 @@ import com.wavetransakt.qr.dto.PaymentQrResponse;
 import com.wavetransakt.qr.service.PaymentQrService;
 import com.wavetransakt.transaction.dto.TransactionResponse;
 import com.wavetransakt.user.entity.User;
+import com.wavetransakt.wallet.service.WemaSettlementGuard;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -18,22 +19,15 @@ import org.springframework.web.bind.annotation.*;
 public class PaymentQrController {
 
     private final PaymentQrService paymentQrService;
+    private final WemaSettlementGuard settlementGuard;
 
-    /**
-     * Recipient creates a one-time payment QR.
-     */
+    /** Recipient can still create a one-time intent during controlled testing. */
     @PostMapping("/create")
-    public ResponseEntity<PaymentQrResponse>
-    create(
+    public ResponseEntity<PaymentQrResponse> create(
             Authentication authentication,
-            @Valid
-            @RequestBody
-            CreatePaymentQrRequest request
+            @Valid @RequestBody CreatePaymentQrRequest request
     ) {
-
-        User user =
-                requireUser(authentication);
-
+        User user = requireUser(authentication);
         return ResponseEntity.ok(
                 paymentQrService.create(
                         user.getId(),
@@ -43,51 +37,34 @@ public class PaymentQrController {
         );
     }
 
-    /**
-     * Payer resolves the scanned QR before confirming.
-     *
-     * No money moves here.
-     */
+    /** Resolve only; no money moves. */
     @PostMapping("/resolve")
-    public ResponseEntity<PaymentQrResponse>
-    resolve(
+    public ResponseEntity<PaymentQrResponse> resolve(
             Authentication authentication,
-            @Valid
-            @RequestBody
-            PaymentQrPayloadRequest request
+            @Valid @RequestBody PaymentQrPayloadRequest request
     ) {
-
         requireUser(authentication);
-
         return ResponseEntity.ok(
-                paymentQrService.resolve(
-                        request.getPayload()
-                )
+                paymentQrService.resolve(request.getPayload())
         );
     }
 
     /**
-     * Consume the payment intent.
+     * The legacy local ledger debit is paused until the same instruction is
+     * settled against the Wema wallet source of funds.
      */
     @PostMapping("/pay")
-    public ResponseEntity<TransactionResponse>
-    pay(
+    public ResponseEntity<TransactionResponse> pay(
             Authentication authentication,
-
             @RequestHeader(
                     value = "Idempotency-Key",
                     required = false
             )
             String idempotencyKey,
-
-            @Valid
-            @RequestBody
-            PaymentQrPayloadRequest request
+            @Valid @RequestBody PaymentQrPayloadRequest request
     ) {
-
-        User user =
-                requireUser(authentication);
-
+        settlementGuard.requireMoneyMovementEnabled();
+        User user = requireUser(authentication);
         return ResponseEntity.ok(
                 paymentQrService.pay(
                         user.getId(),
@@ -97,28 +74,17 @@ public class PaymentQrController {
         );
     }
 
-    private User requireUser(
-            Authentication authentication
-    ) {
-
-        if (authentication == null ||
-                !authentication.isAuthenticated()) {
-
-            throw new IllegalArgumentException(
-                    "Authentication required"
-            );
+    private User requireUser(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new IllegalArgumentException("Authentication required");
         }
 
-        Object principal =
-                authentication.getPrincipal();
-
+        Object principal = authentication.getPrincipal();
         if (!(principal instanceof User user)) {
-
             throw new IllegalArgumentException(
                     "Invalid authentication principal"
             );
         }
-
         return user;
     }
 }
