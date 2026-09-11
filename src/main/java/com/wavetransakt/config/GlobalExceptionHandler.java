@@ -76,8 +76,9 @@ public class GlobalExceptionHandler {
         }
 
         HttpStatus status = switch (ex.getErrorCode()) {
-            case "WEMA_API_KEY_MISSING", "WEMA_BASE_URL_INVALID" ->
-                    HttpStatus.SERVICE_UNAVAILABLE;
+            case "WEMA_API_KEY_MISSING",
+                    "WEMA_SUBSCRIPTION_KEY_MISSING",
+                    "WEMA_BASE_URL_INVALID" -> HttpStatus.SERVICE_UNAVAILABLE;
             case "WEMA_REQUEST_REJECTED" -> HttpStatus.BAD_REQUEST;
             default -> HttpStatus.BAD_GATEWAY;
         };
