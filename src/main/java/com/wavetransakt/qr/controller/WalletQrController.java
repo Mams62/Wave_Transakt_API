@@ -7,6 +7,7 @@ import com.wavetransakt.transaction.dto.TransactionResponse;
 import com.wavetransakt.transaction.dto.TransferRequest;
 import com.wavetransakt.transaction.service.TransactionService;
 import com.wavetransakt.user.entity.User;
+import com.wavetransakt.wallet.service.WemaSettlementGuard;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -20,120 +21,73 @@ public class WalletQrController {
 
     private final WalletQrService walletQrService;
     private final TransactionService transactionService;
+    private final WemaSettlementGuard settlementGuard;
 
-    /**
-     * Returns the authenticated user's permanent wallet QR.
-     *
-     * The QR identifies a wallet only.
-     * It does NOT authorize a transaction.
-     */
+    /** Permanent QR creation/lookup never moves money and stays enabled. */
     @GetMapping("/wallet")
     public ResponseEntity<?> getMyWalletQr(
             Authentication authentication
     ) {
-
         User user = requireUser(authentication);
-
-        WalletQrResponse response =
-                walletQrService.getWalletQr(
-                        user.getId()
-                );
-
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(
+                walletQrService.getWalletQr(user.getId())
+        );
     }
 
-    /**
-     * Resolve the wallet represented by a permanent QR.
-     *
-     * This endpoint NEVER moves money.
-     */
+    /** Recipient resolution stays enabled during Wema settlement integration. */
     @GetMapping("/wallet/{walletNumber}")
-    public ResponseEntity<WalletQrResponse>
-    resolveWalletQr(
+    public ResponseEntity<WalletQrResponse> resolveWalletQr(
             @PathVariable String walletNumber
     ) {
-
         return ResponseEntity.ok(
-                walletQrService
-                        .getWalletQrByWalletNumber(
-                                walletNumber
-                        )
+                walletQrService.getWalletQrByWalletNumber(walletNumber)
         );
     }
 
     /**
-     * Execute a wallet QR payment.
-     *
-     * The permanent QR identifies the receiver.
-     *
-     * Idempotency-Key identifies ONE payer instruction.
-     *
-     * Retrying the same payment with the same key must return
-     * the original transaction rather than debit again.
+     * Legacy local-balance QR debit is closed by default while Wema is the
+     * source-of-funds provider. It may be re-enabled only after Wema settlement
+     * is connected and tested end to end.
      */
     @PostMapping("/wallet/pay")
-    public ResponseEntity<TransactionResponse>
-    payWalletQr(
+    public ResponseEntity<TransactionResponse> payWalletQr(
             Authentication authentication,
-
             @RequestHeader(
                     value = "Idempotency-Key",
                     required = false
             )
             String idempotencyKey,
-
-            @Valid
-            @RequestBody
-            QrTransferRequest request
+            @Valid @RequestBody QrTransferRequest request
     ) {
-
+        settlementGuard.requireMoneyMovementEnabled();
         User user = requireUser(authentication);
 
-        TransferRequest transferRequest =
-                TransferRequest.builder()
-                        .receiverWalletNumber(
-                                request.getWalletNumber()
-                        )
-                        .amount(
-                                request.getAmount()
-                        )
-                        .description(
-                                request.getDescription()
-                        )
-                        .build();
+        TransferRequest transferRequest = TransferRequest.builder()
+                .receiverWalletNumber(request.getWalletNumber())
+                .amount(request.getAmount())
+                .description(request.getDescription())
+                .build();
 
-        TransactionResponse response =
+        return ResponseEntity.ok(
                 transactionService.transfer(
                         user.getId(),
                         idempotencyKey,
                         transferRequest
-                );
-
-        return ResponseEntity.ok(response);
+                )
+        );
     }
 
-    private User requireUser(
-            Authentication authentication
-    ) {
-
-        if (authentication == null ||
-                !authentication.isAuthenticated()) {
-
-            throw new IllegalArgumentException(
-                    "Authentication required"
-            );
+    private User requireUser(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new IllegalArgumentException("Authentication required");
         }
 
-        Object principal =
-                authentication.getPrincipal();
-
+        Object principal = authentication.getPrincipal();
         if (!(principal instanceof User user)) {
-
             throw new IllegalArgumentException(
                     "Invalid authentication principal"
             );
         }
-
         return user;
     }
 }
