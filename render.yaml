@@ -1,0 +1,81 @@
+services:
+  - type: web
+    name: wave-transakt-api-staging
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: controlled-start-api-20260910
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: WAVE_DB_HOST
+        fromDatabase:
+          name: wave-transakt-staging-db
+          property: host
+      - key: WAVE_DB_PORT
+        value: "5432"
+      - key: WAVE_DB_NAME
+        fromDatabase:
+          name: wave-transakt-staging-db
+          property: database
+      - key: WAVE_DB_USERNAME
+        fromDatabase:
+          name: wave-transakt-staging-db
+          property: user
+      - key: WAVE_DB_PASSWORD
+        fromDatabase:
+          name: wave-transakt-staging-db
+          property: password
+      - key: WAVE_JWT_SECRET
+        generateValue: true
+      - key: WAVE_JWT_EXPIRATION
+        value: "86400000"
+      - key: WAVE_SQL_LOGGING
+        value: "false"
+      - key: WAVE_RETURN_VERIFICATION_CODE
+        value: "true"
+
+      # Wema Wallet Services / account onboarding.
+      # Calls go to the Playground API gateway, not a developer-portal host.
+      - key: WAVE_WEMA_WALLET_BASE_URL
+        value: "https://playground.azure-api.net"
+      - key: WAVE_WEMA_WALLET_SUBSCRIPTION_KEY
+        sync: false
+      - key: WAVE_WEMA_WALLET_API_KEY
+        sync: false
+
+      # Wema Wallet Transfer / bank-transfer APIs are exposed from a separate
+      # APIM developer gateway and therefore use a separate subscription key.
+      - key: WAVE_WEMA_TRANSFER_BASE_URL
+        value: "https://wema-alatdev-apimgt.azure-api.net"
+      - key: WAVE_WEMA_TRANSFER_SUBSCRIPTION_KEY
+        sync: false
+      - key: WAVE_WEMA_TRANSFER_API_KEY
+        sync: false
+      - key: WAVE_WEMA_CHANNEL_ID
+        sync: false
+      - key: WAVE_WEMA_TRANSFER_SALT
+        sync: false
+
+      # Used only by Wema products/endpoints that issue a separate access value.
+      - key: WAVE_WEMA_ACCESS_KEY
+        sync: false
+
+      # VTpass remains sandbox-only for the controlled services catalog/payment tests.
+      - key: WAVE_VTPASS_BASE_URL
+        value: "https://sandbox.vtpass.com/api/"
+      - key: WAVE_VTPASS_API_KEY
+        sync: false
+      - key: WAVE_VTPASS_PUBLIC_KEY
+        sync: false
+      - key: WAVE_VTPASS_SECRET_KEY
+        sync: false
+
+databases:
+  - name: wave-transakt-staging-db
+    plan: free
+    region: frankfurt
+    databaseName: wave_transakt_staging
+    user: wave_transakt
+    postgresMajorVersion: "17"
+    ipAllowList: []
