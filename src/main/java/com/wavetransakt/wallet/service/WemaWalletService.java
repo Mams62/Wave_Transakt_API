@@ -8,6 +8,7 @@ import com.wavetransakt.wallet.dto.WemaWalletActionResponse;
 import com.wavetransakt.wallet.entity.Wallet;
 import com.wavetransakt.wallet.entity.WemaWalletStatus;
 import com.wavetransakt.wallet.repository.WalletRepository;
+import com.wavetransakt.wallet.wema.WemaProviderException;
 import com.wavetransakt.wallet.wema.WemaWalletClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -54,6 +55,8 @@ public class WemaWalletService {
             );
         }
 
+        requireProviderConfiguration();
+
         WemaWalletClient.StartResult result =
                 wemaWalletClient.startNinWallet(user);
 
@@ -79,6 +82,8 @@ public class WemaWalletService {
                     "Start Wema wallet onboarding before submitting an OTP"
             );
         }
+
+        requireProviderConfiguration();
 
         WemaWalletClient.ProviderMessage result =
                 wemaWalletClient.validateNinOtp(
@@ -118,6 +123,8 @@ public class WemaWalletService {
                     "Wema is waiting for OTP validation before account generation can begin."
             );
         }
+
+        requireProviderConfiguration();
 
         WemaWalletClient.PartnershipAccountDetails details =
                 wemaWalletClient.getPartnershipAccountDetails(user.getPhone());
@@ -214,6 +221,34 @@ public class WemaWalletService {
                         !wallet.getProviderAccountNumber().isBlank(),
                 wallet.getProviderLastSyncedAt()
         );
+    }
+
+    private void requireProviderConfiguration() {
+        WemaWalletClient.Diagnostics diagnostics = wemaWalletClient.diagnostics();
+
+        if (!diagnostics.gatewayLooksValid()) {
+            throw new WemaProviderException(
+                    "WEMA_BASE_URL_INVALID",
+                    "Wema Wallet Services gateway is not configured correctly on the Wave server.",
+                    null
+            );
+        }
+
+        if (!diagnostics.apiKeyConfigured()) {
+            throw new WemaProviderException(
+                    "WEMA_API_KEY_MISSING",
+                    "Wema Wallet Services x-api-key is missing from the Wave server. Re-add WAVE_WEMA_WALLET_API_KEY in Render and redeploy.",
+                    null
+            );
+        }
+
+        if (!diagnostics.subscriptionKeyConfigured()) {
+            throw new WemaProviderException(
+                    "WEMA_SUBSCRIPTION_KEY_MISSING",
+                    "Wema Wallet Services subscription key is missing from the Wave server. Re-add WAVE_WEMA_WALLET_SUBSCRIPTION_KEY in Render and redeploy.",
+                    null
+            );
+        }
     }
 
     private User requireUser(UUID userId) {
