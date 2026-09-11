@@ -11,6 +11,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -45,13 +47,19 @@ public class WemaWalletClient {
             throw new IllegalArgumentException("User is required");
         }
         if (user.getNin() == null || !user.getNin().matches("\\d{11}")) {
-            throw new IllegalArgumentException("A valid 11-digit NIN is required for Wema wallet creation");
+            throw new IllegalArgumentException(
+                    "A valid 11-digit NIN is required for Wema wallet creation"
+            );
         }
         if (user.getPhone() == null || user.getPhone().isBlank()) {
-            throw new IllegalArgumentException("Phone number is required for Wema wallet creation");
+            throw new IllegalArgumentException(
+                    "Phone number is required for Wema wallet creation"
+            );
         }
         if (user.getEmail() == null || user.getEmail().isBlank()) {
-            throw new IllegalArgumentException("Email is required for Wema wallet creation");
+            throw new IllegalArgumentException(
+                    "Email is required for Wema wallet creation"
+            );
         }
 
         Map<String, Object> body = new LinkedHashMap<>();
@@ -64,18 +72,23 @@ public class WemaWalletClient {
                 body
         );
 
-        assertSuccessful(response, "Wema wallet creation request was rejected");
+        assertSuccessful(
+                response,
+                "Wema wallet creation request was rejected"
+        );
 
-        String trackingId = firstRecursiveText(
+        String trackingId = firstExpectedText(
                 response,
                 "trackingId",
                 "trackingID",
                 "tracking_id"
         );
+
         if (trackingId.isBlank()) {
-            throw new IllegalStateException(
-                    "Wema accepted the wallet request but did not return a tracking ID. " +
-                            "Check the Wema Wallet Services subscription/profile configuration."
+            throw new WemaProviderException(
+                    "WEMA_TRACKING_ID_MISSING",
+                    "Wema accepted the wallet request but did not return the tracking ID required for OTP validation. Confirm that the Wallet Creation API is enabled for this channel.",
+                    null
             );
         }
 
@@ -113,12 +126,18 @@ public class WemaWalletClient {
         );
 
         assertSuccessful(response, "Wema OTP validation failed");
+
         return new ProviderMessage(
-                message(response, "OTP accepted. Wema wallet creation is pending.")
+                message(
+                        response,
+                        "OTP accepted. Wema wallet creation is pending."
+                )
         );
     }
 
-    public PartnershipAccountDetails getPartnershipAccountDetails(String phoneNumber) {
+    public PartnershipAccountDetails getPartnershipAccountDetails(
+            String phoneNumber
+    ) {
         requireCredentials();
 
         if (phoneNumber == null || phoneNumber.isBlank()) {
@@ -126,28 +145,50 @@ public class WemaWalletClient {
         }
 
         String url = UriComponentsBuilder
-                .fromHttpUrl(normalizedBaseUrl() +
-                        "/wallet-creation/api/CustomerAccount/GetPartnershipAccountDetails")
+                .fromHttpUrl(
+                        normalizedBaseUrl() +
+                                "/wallet-creation/api/CustomerAccount/GetPartnershipAccountDetails"
+                )
                 .queryParam("phoneNumber", phoneNumber.trim())
                 .build(true)
                 .toUriString();
 
         JsonNode response = exchange(url, HttpMethod.GET, null);
-        assertSuccessful(response, "Unable to retrieve Wema wallet account details");
-
-        String accountNumber = firstRecursiveText(
+        assertSuccessful(
                 response,
-                "accountNumber",
-                "walletNumber",
-                "nuban",
-                "NUBAN"
+                "Unable to retrieve Wema wallet account details"
         );
+
+        JsonNode data = response.path("data");
+        String accountNumber = text(data, "accountNumber");
+
+        if (accountNumber.isBlank()) {
+            JsonNode result = response.path("result");
+            accountNumber = text(result, "accountNumber");
+        }
+        if (accountNumber.isBlank()) {
+            accountNumber = text(response, "accountNumber");
+        }
+        if (accountNumber.isBlank()) {
+            // Final compatibility fallback for older Wema envelopes. Restrict
+            // the search to accountNumber/NUBAN fields so wrapper status values
+            // can never be mistaken for wallet data.
+            accountNumber = firstRecursiveText(
+                    response,
+                    "accountNumber",
+                    "nuban",
+                    "NUBAN"
+            );
+        }
 
         return new PartnershipAccountDetails(
                 accountNumber,
-                message(response, accountNumber.isBlank()
-                        ? "Wema wallet is still pending"
-                        : "Wema wallet account created")
+                message(
+                        response,
+                        accountNumber.isBlank()
+                                ? "Wema wallet is still pending"
+                                : "Wema wallet account created"
+                )
         );
     }
 
@@ -155,7 +196,9 @@ public class WemaWalletClient {
         requireCredentials();
 
         if (accountNumber == null || !accountNumber.matches("\\d{10}")) {
-            throw new IllegalArgumentException("A valid 10-digit Wema account number is required");
+            throw new IllegalArgumentException(
+                    "A valid 10-digit Wema account number is required"
+            );
         }
 
         String url = normalizedBaseUrl() +
@@ -165,27 +208,49 @@ public class WemaWalletClient {
         JsonNode response = exchange(url, HttpMethod.GET, null);
         assertSuccessful(response, "Unable to retrieve Wema wallet balance");
 
-        String walletNumber = firstRecursiveText(
-                response,
-                "walletNumber",
-                "accountNumber"
-        );
-        String balanceRaw = firstRecursiveText(
-                response,
-                "availableBalance",
-                "balance"
-        );
-        String walletStatus = firstRecursiveText(
-                response,
-                "walletStatus",
-                "status"
-        );
+        // Wema Account Management returns the wallet details in `result`.
+        // Some older environments use `data`, so support that without doing an
+        // unrestricted recursive status lookup.
+        JsonNode payload = response.path("result");
+        if (!payload.isObject()) {
+            payload = response.path("data");
+        }
+        if (!payload.isObject()) {
+            payload = response;
+        }
+
+        String walletNumber = text(payload, "walletNumber");
+        if (walletNumber.isBlank()) {
+            walletNumber = text(payload, "accountNumber");
+        }
+
+        String balanceRaw = text(payload, "availableBalance");
+        if (balanceRaw.isBlank()) {
+            balanceRaw = text(payload, "balance");
+        }
+
+        String walletStatus = text(payload, "walletStatus");
+
+        if (balanceRaw.isBlank()) {
+            throw new WemaProviderException(
+                    "WEMA_BALANCE_MISSING",
+                    "Wema returned wallet details without an available balance.",
+                    null
+            );
+        }
 
         BigDecimal availableBalance;
         try {
-            availableBalance = new BigDecimal(balanceRaw.replace(",", "").trim());
+            availableBalance = new BigDecimal(
+                    balanceRaw.replace(",", "").trim()
+            );
         } catch (Exception e) {
-            throw new IllegalStateException("Wema returned an invalid wallet balance");
+            throw new WemaProviderException(
+                    "WEMA_BALANCE_INVALID",
+                    "Wema returned an invalid wallet balance.",
+                    null,
+                    e
+            );
         }
 
         return new WalletAccountDetails(
@@ -195,16 +260,48 @@ public class WemaWalletClient {
         );
     }
 
-    private JsonNode post(String path, Object body) {
-        return exchange(normalizedBaseUrl() + path, HttpMethod.POST, body);
+    public Diagnostics diagnostics() {
+        String configuredBase = baseUrl == null ? "" : baseUrl.trim();
+        String host = "";
+        try {
+            java.net.URI uri = java.net.URI.create(configuredBase);
+            host = uri.getHost() == null ? "" : uri.getHost();
+        } catch (Exception ignored) {
+            // The boolean below communicates invalid configuration without
+            // exposing any credential value.
+        }
+
+        boolean httpsGateway = configuredBase.startsWith("https://") &&
+                !configuredBase.contains(".developer.azure-api.net") &&
+                !host.isBlank();
+
+        return new Diagnostics(
+                host,
+                httpsGateway,
+                apiKey != null && !apiKey.isBlank(),
+                subscriptionKey != null && !subscriptionKey.isBlank()
+        );
     }
 
-    private JsonNode exchange(String url, HttpMethod method, Object body) {
+    private JsonNode post(String path, Object body) {
+        return exchange(
+                normalizedBaseUrl() + path,
+                HttpMethod.POST,
+                body
+        );
+    }
+
+    private JsonNode exchange(
+            String url,
+            HttpMethod method,
+            Object body
+    ) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setAccept(List.of(MediaType.APPLICATION_JSON));
         headers.setCacheControl(CacheControl.noCache());
         headers.set(API_KEY_HEADER, apiKey.trim());
+
         if (subscriptionKey != null && !subscriptionKey.isBlank()) {
             headers.set(SUBSCRIPTION_HEADER, subscriptionKey.trim());
         }
@@ -213,56 +310,113 @@ public class WemaWalletClient {
                 ? new HttpEntity<>(headers)
                 : new HttpEntity<>(body, headers);
 
-        ResponseEntity<JsonNode> response = restTemplate.exchange(
-                url,
-                method,
-                entity,
-                JsonNode.class
-        );
+        try {
+            ResponseEntity<JsonNode> response = restTemplate.exchange(
+                    url,
+                    method,
+                    entity,
+                    JsonNode.class
+            );
 
-        JsonNode payload = response.getBody();
-        if (payload == null) {
-            throw new IllegalStateException("Wema returned an empty response");
+            JsonNode payload = response.getBody();
+            if (payload == null) {
+                throw new WemaProviderException(
+                        "WEMA_EMPTY_RESPONSE",
+                        "Wema returned an empty response.",
+                        response.getStatusCode().value()
+                );
+            }
+            return payload;
+        } catch (RestClientResponseException ex) {
+            int status = ex.getStatusCode().value();
+            if (status == 401 || status == 403) {
+                throw new WemaProviderException(
+                        "WEMA_AUTH_REJECTED",
+                        "Wema rejected the Wallet Services credentials or this channel is not subscribed to the required product.",
+                        status,
+                        ex
+                );
+            }
+            if (status == 404) {
+                throw new WemaProviderException(
+                        "WEMA_ENDPOINT_UNAVAILABLE",
+                        "The Wema Wallet Services endpoint is not available for the configured sandbox gateway or subscription.",
+                        status,
+                        ex
+                );
+            }
+            if (status == 429) {
+                throw new WemaProviderException(
+                        "WEMA_RATE_LIMIT",
+                        "Wema temporarily rate-limited the wallet request. Try again shortly.",
+                        status,
+                        ex
+                );
+            }
+            throw new WemaProviderException(
+                    "WEMA_UPSTREAM_ERROR",
+                    "Wema Wallet Services returned HTTP " + status + ".",
+                    status,
+                    ex
+            );
+        } catch (ResourceAccessException ex) {
+            throw new WemaProviderException(
+                    "WEMA_NETWORK_ERROR",
+                    "The Wave server could not reach Wema Wallet Services. Try again shortly.",
+                    null,
+                    ex
+            );
         }
-        return payload;
     }
 
+    /**
+     * Interpret Wema's documented response envelope without treating a valid
+     * PENDING onboarding state as an error. We intentionally avoid recursively
+     * reading arbitrary `responseCode` fields because nested domain objects can
+     * contain unrelated codes.
+     */
     private void assertSuccessful(JsonNode response, String fallback) {
         JsonNode statusNode = response.path("status");
+
         if (statusNode.isBoolean() && !statusNode.asBoolean()) {
-            throw new IllegalArgumentException(message(response, fallback));
+            throw providerRejected(response, fallback);
         }
 
         JsonNode successfulNode = response.path("successful");
         if (successfulNode.isBoolean() && !successfulNode.asBoolean()) {
-            throw new IllegalArgumentException(message(response, fallback));
+            throw providerRejected(response, fallback);
         }
 
         JsonNode hasErrorNode = response.path("hasError");
         if (hasErrorNode.isBoolean() && hasErrorNode.asBoolean()) {
-            throw new IllegalArgumentException(message(response, fallback));
+            throw providerRejected(response, fallback);
         }
 
-        String statusText = statusNode.isTextual()
-                ? statusNode.asText("").trim().toUpperCase()
-                : "";
-        if (statusText.equals("FAILED") ||
-                statusText.equals("FAILURE") ||
-                statusText.equals("ERROR") ||
-                statusText.equals("INVALID")) {
-            throw new IllegalArgumentException(message(response, fallback));
-        }
-
-        String responseCode = firstRecursiveText(response, "responseCode", "ResponseCode");
-        if (!responseCode.isBlank() &&
-                !responseCode.equals("00") &&
-                !responseCode.equalsIgnoreCase("SUCCESS")) {
-            throw new IllegalArgumentException(message(response, fallback));
+        if (statusNode.isTextual()) {
+            String status = statusNode.asText("").trim().toUpperCase();
+            if (status.equals("FAILED") ||
+                    status.equals("FAILURE") ||
+                    status.equals("ERROR") ||
+                    status.equals("INVALID") ||
+                    status.equals("REJECTED")) {
+                throw providerRejected(response, fallback);
+            }
         }
     }
 
+    private WemaProviderException providerRejected(
+            JsonNode response,
+            String fallback
+    ) {
+        return new WemaProviderException(
+                "WEMA_REQUEST_REJECTED",
+                message(response, fallback),
+                null
+        );
+    }
+
     private String message(JsonNode response, String fallback) {
-        String value = firstRecursiveText(
+        String value = firstExpectedText(
                 response,
                 "message",
                 "Message",
@@ -273,6 +427,40 @@ public class WemaWalletClient {
         return value.isBlank() ? fallback : value;
     }
 
+    private String firstExpectedText(JsonNode response, String... names) {
+        for (String name : names) {
+            String direct = text(response, name);
+            if (!direct.isBlank()) {
+                return direct;
+            }
+        }
+
+        for (String container : new String[]{"data", "result"}) {
+            JsonNode node = response.path(container);
+            if (node.isObject()) {
+                for (String name : names) {
+                    String value = text(node, name);
+                    if (!value.isBlank()) {
+                        return value;
+                    }
+                }
+            }
+        }
+
+        return firstRecursiveText(response, names);
+    }
+
+    private String text(JsonNode node, String name) {
+        if (node == null || !node.isObject()) {
+            return "";
+        }
+        JsonNode value = node.get(name);
+        if (value == null || value.isNull() || !value.isValueNode()) {
+            return "";
+        }
+        return value.asText("").trim();
+    }
+
     private String firstRecursiveText(JsonNode node, String... names) {
         if (node == null || node.isNull() || node.isMissingNode()) {
             return "";
@@ -280,18 +468,18 @@ public class WemaWalletClient {
 
         if (node.isObject()) {
             for (String name : names) {
-                JsonNode direct = node.get(name);
-                if (direct != null && !direct.isNull() && direct.isValueNode()) {
-                    String value = direct.asText("").trim();
-                    if (!value.isBlank()) {
-                        return value;
-                    }
+                String direct = text(node, name);
+                if (!direct.isBlank()) {
+                    return direct;
                 }
             }
 
             Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
             while (fields.hasNext()) {
-                String value = firstRecursiveText(fields.next().getValue(), names);
+                String value = firstRecursiveText(
+                        fields.next().getValue(),
+                        names
+                );
                 if (!value.isBlank()) {
                     return value;
                 }
@@ -310,8 +498,10 @@ public class WemaWalletClient {
 
     private void requireCredentials() {
         if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalStateException(
-                    "Wema Wallet Services x-api-key is not configured on the server"
+            throw new WemaProviderException(
+                    "WEMA_API_KEY_MISSING",
+                    "Wema Wallet Services x-api-key is not configured on the Wave server.",
+                    null
             );
         }
     }
@@ -319,11 +509,17 @@ public class WemaWalletClient {
     private String normalizedBaseUrl() {
         String value = baseUrl == null ? "" : baseUrl.trim();
         if (!value.startsWith("https://")) {
-            throw new IllegalStateException("Wema Wallet Services base URL must use HTTPS");
+            throw new WemaProviderException(
+                    "WEMA_BASE_URL_INVALID",
+                    "Wema Wallet Services base URL must use HTTPS.",
+                    null
+            );
         }
         if (value.contains(".developer.azure-api.net")) {
-            throw new IllegalStateException(
-                    "Use the Wema API gateway hostname, not the developer portal hostname"
+            throw new WemaProviderException(
+                    "WEMA_BASE_URL_INVALID",
+                    "The Wema developer portal hostname cannot be used for API calls; configure the API gateway hostname instead.",
+                    null
             );
         }
         return value.endsWith("/")
@@ -337,13 +533,24 @@ public class WemaWalletClient {
     public record ProviderMessage(String message) {
     }
 
-    public record PartnershipAccountDetails(String accountNumber, String message) {
+    public record PartnershipAccountDetails(
+            String accountNumber,
+            String message
+    ) {
     }
 
     public record WalletAccountDetails(
             String walletNumber,
             BigDecimal availableBalance,
             String walletStatus
+    ) {
+    }
+
+    public record Diagnostics(
+            String gatewayHost,
+            boolean gatewayLooksValid,
+            boolean apiKeyConfigured,
+            boolean subscriptionKeyConfigured
     ) {
     }
 }
