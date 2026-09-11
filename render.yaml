@@ -9,13 +9,20 @@ services:
     healthCheckPath: /api/health
     autoDeployTrigger: commit
     envVars:
-      # Spring Boot reads WAVE_DB_URL directly. Bind it to Render Postgres's
-      # private connection string so the controlled stage always uses the
-      # staging database provisioned by this Blueprint.
-      - key: WAVE_DB_URL
+      # Spring/JDBC needs a jdbc:postgresql URL. Keep Render Postgres values
+      # split so application.yml can safely assemble the JDBC URL.
+      - key: WAVE_DB_HOST
         fromDatabase:
           name: wave-transakt-staging-db
-          property: connectionString
+          property: host
+      - key: WAVE_DB_PORT
+        fromDatabase:
+          name: wave-transakt-staging-db
+          property: port
+      - key: WAVE_DB_NAME
+        fromDatabase:
+          name: wave-transakt-staging-db
+          property: database
       - key: WAVE_DB_USERNAME
         fromDatabase:
           name: wave-transakt-staging-db
@@ -36,8 +43,7 @@ services:
       - key: WAVE_RETURN_VERIFICATION_CODE
         value: "true"
 
-      # Keep all legacy/local money movement disabled in the controlled stage
-      # while Wema is the source-of-funds provider.
+      # Controlled-stage safety switches. Wema remains the wallet source of funds.
       - key: WAVE_LEGACY_PAYSTACK_ENABLED
         value: "false"
       - key: WAVE_LOCAL_MONEY_MOVEMENT_ENABLED
@@ -45,7 +51,6 @@ services:
       - key: WAVE_SERVICE_PAYMENTS_ENABLED
         value: "false"
 
-      # Wema Wallet Services / account onboarding.
       - key: WAVE_WEMA_WALLET_BASE_URL
         value: "https://playground.azure-api.net"
       - key: WAVE_WEMA_WALLET_SUBSCRIPTION_KEY
@@ -53,7 +58,6 @@ services:
       - key: WAVE_WEMA_WALLET_API_KEY
         sync: false
 
-      # Wema Wallet Transfer / bank-transfer APIs use a separate APIM gateway.
       - key: WAVE_WEMA_TRANSFER_BASE_URL
         value: "https://wema-alatdev-apimgt.azure-api.net"
       - key: WAVE_WEMA_TRANSFER_SUBSCRIPTION_KEY
@@ -67,7 +71,6 @@ services:
       - key: WAVE_WEMA_ACCESS_KEY
         sync: false
 
-      # VTpass remains sandbox-only during controlled testing.
       - key: WAVE_VTPASS_BASE_URL
         value: "https://sandbox.vtpass.com/api/"
       - key: WAVE_VTPASS_API_KEY
