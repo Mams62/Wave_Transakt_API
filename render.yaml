@@ -78,14 +78,20 @@ services:
       - key: WAVE_SMS_CHANNEL
         value: "dnd"
 
-      # Liveness / identity provider. Keep disabled until an approved provider
-      # is connected and its signed callback has been tested end to end.
+      # Dojah liveness. Credentials stay server-side and are never returned
+      # to Android. Leave provider-configured false until sandbox testing passes.
       - key: WAVE_LIVENESS_PROVIDER
-        value: "UNCONFIGURED"
+        value: "DOJAH"
       - key: WAVE_LIVENESS_PROVIDER_CONFIGURED
         value: "false"
       - key: WAVE_LIVENESS_WEBHOOK_SECRET
         generateValue: true
+      - key: WAVE_DOJAH_BASE_URL
+        value: "https://api.dojah.io"
+      - key: WAVE_DOJAH_APP_ID
+        sync: false
+      - key: WAVE_DOJAH_API_KEY
+        sync: false
 
       - key: WAVE_VTPASS_BASE_URL
         value: "https://sandbox.vtpass.com/api/"
