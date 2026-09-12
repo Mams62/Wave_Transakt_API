@@ -112,7 +112,22 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleIllegalState(
             IllegalStateException ex
     ) {
+        String message = ex.getMessage() == null ? "" : ex.getMessage().trim();
+        String lower = message.toLowerCase();
+
+        boolean identityProviderFailure = lower.contains("dojah")
+                || lower.contains("government identity")
+                || lower.contains("identity provider");
+
         Map<String, Object> response = new LinkedHashMap<>();
+        if (identityProviderFailure) {
+            response.put("message", message.isBlank()
+                    ? "Identity verification provider is temporarily unavailable."
+                    : message);
+            response.put("error", "IDENTITY_PROVIDER_UNAVAILABLE");
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
+        }
+
         response.put(
                 "message",
                 "A required server component is temporarily unavailable."
