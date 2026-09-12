@@ -33,22 +33,16 @@ jwt:
   secret: ${WAVE_JWT_SECRET}
   expiration: ${WAVE_JWT_EXPIRATION:86400000}
 
-# Legacy Paystack code remains compile-time compatible only. Its controllers are
-# disabled by wave.legacy.paystack-enabled unless explicitly re-enabled.
 paystack:
   public-key: ${WAVE_PAYSTACK_PUBLIC_KEY:}
   secret-key: ${WAVE_PAYSTACK_SECRET_KEY:}
 
 wema:
-  # Wallet creation and wallet account management are published through the
-  # Playground API gateway. Do not use the developer-portal hostname here.
   wallet:
     base-url: ${WAVE_WEMA_WALLET_BASE_URL:https://playground.azure-api.net}
     subscription-key: ${WAVE_WEMA_WALLET_SUBSCRIPTION_KEY:}
     api-key: ${WAVE_WEMA_WALLET_API_KEY:}
 
-  # Wema bank-transfer products may be issued through a separate APIM gateway
-  # and may use credentials distinct from Wallet Services.
   transfer:
     base-url: ${WAVE_WEMA_TRANSFER_BASE_URL:https://wema-alatdev-apimgt.azure-api.net}
     subscription-key: ${WAVE_WEMA_TRANSFER_SUBSCRIPTION_KEY:}
@@ -56,7 +50,6 @@ wema:
     channel-id: ${WAVE_WEMA_CHANNEL_ID:}
     salt: ${WAVE_WEMA_TRANSFER_SALT:}
 
-  # Some Wema bills/airtime products use a separate access credential.
   access-key: ${WAVE_WEMA_ACCESS_KEY:}
 
 vtpass:
@@ -69,18 +62,20 @@ wave:
   demo:
     return-verification-code: ${WAVE_RETURN_VERIFICATION_CODE:false}
 
-  # Paystack is no longer the wallet provider in this controlled build.
+  sms:
+    # Termii-compatible messaging endpoint. BASE URL must come from the SMS
+    # provider dashboard and credentials must stay only in Render.
+    base-url: ${WAVE_SMS_BASE_URL:}
+    api-key: ${WAVE_SMS_API_KEY:}
+    sender-id: ${WAVE_SMS_SENDER_ID:WavePay}
+    channel: ${WAVE_SMS_CHANNEL:dnd}
+
   legacy:
     paystack-enabled: ${WAVE_LEGACY_PAYSTACK_ENABLED:false}
 
-  # Old Wave-to-Wave ledger transfers must not mutate a local projection while
-  # the user-facing balance is sourced from Wema. Enable only after a Wema debit
-  # and settlement path has been wired and tested end to end.
   wallet:
     local-money-movement-enabled: ${WAVE_LOCAL_MONEY_MOVEMENT_ENABLED:false}
 
-  # Catalog browsing remains enabled, but VTpass purchases stay paused until
-  # service settlement debits the Wema wallet rather than the legacy projection.
   services:
     provider-payments-enabled: ${WAVE_SERVICE_PAYMENTS_ENABLED:false}
 
