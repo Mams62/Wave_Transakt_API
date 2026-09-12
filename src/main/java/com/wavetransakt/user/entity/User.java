@@ -54,6 +54,17 @@ public class User {
     @Column(unique = true, length = 20)
     private String nin;
 
+    @Column(name = "bvn_verified", nullable = false)
+    @Builder.Default
+    private Boolean bvnVerified = false;
+
+    @Column(name = "nin_verified", nullable = false)
+    @Builder.Default
+    private Boolean ninVerified = false;
+
+    @Column(name = "government_identity_verified_at")
+    private LocalDateTime governmentIdentityVerifiedAt;
+
     @Column(length = 80)
     private String state;
 
