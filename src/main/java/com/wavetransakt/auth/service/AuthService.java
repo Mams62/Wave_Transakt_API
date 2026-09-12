@@ -2,6 +2,7 @@ package com.wavetransakt.auth.service;
 
 import com.wavetransakt.auth.dto.AuthResponse;
 import com.wavetransakt.auth.dto.LoginOtpRequest;
+import com.wavetransakt.identity.provider.DojahGovernmentIdentityClient;
 import com.wavetransakt.user.dto.LoginRequest;
 import com.wavetransakt.user.dto.RegisterRequest;
 import com.wavetransakt.user.entity.User;
@@ -15,6 +16,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.text.Normalizer;
+import java.time.LocalDateTime;
 import java.util.Locale;
 
 @Service
@@ -27,6 +30,7 @@ public class AuthService {
     private final VerificationService verificationService;
     private final SmsOtpSender smsOtpSender;
     private final FaceLoginChallengeService faceLoginChallengeService;
+    private final DojahGovernmentIdentityClient governmentIdentityClient;
 
     @Value("${wave.demo.return-verification-code:false}")
     private boolean returnVerificationCode;
@@ -43,6 +47,15 @@ public class AuthService {
         if (userRepository.existsByBvn(bvn)) throw new IllegalArgumentException("BVN already linked to an account");
         if (userRepository.existsByNin(nin)) throw new IllegalArgumentException("NIN already linked to an account");
 
+        // Fail closed: registration is not allowed to continue from format-only checks.
+        // Both identifiers must resolve through the configured government identity provider.
+        DojahGovernmentIdentityClient.IdentityRecord bvnRecord = governmentIdentityClient.lookupBvn(bvn);
+        DojahGovernmentIdentityClient.IdentityRecord ninRecord = governmentIdentityClient.lookupNin(nin);
+
+        requireIdentityMatch("BVN", bvnRecord, request);
+        requireIdentityMatch("NIN", ninRecord, request);
+        requireSamePerson(bvnRecord, ninRecord);
+
         User user = User.builder()
                 .firstName(request.getFirstName().trim())
                 .lastName(request.getLastName().trim())
@@ -51,6 +64,9 @@ public class AuthService {
                 .password(passwordEncoder.encode(request.getAccountPin()))
                 .bvn(bvn)
                 .nin(nin)
+                .bvnVerified(true)
+                .ninVerified(true)
+                .governmentIdentityVerifiedAt(LocalDateTime.now())
                 .state(request.getState().trim())
                 .localGovernment(request.getLocalGovernment().trim())
                 .dateOfBirth(request.getDateOfBirth())
@@ -64,7 +80,7 @@ public class AuthService {
         String verificationCode = verificationService.createEmailVerificationCode(user);
 
         return AuthResponse.builder()
-                .message("Registration successful. Please verify your email.")
+                .message("Identity verified. Registration successful. Please verify your email.")
                 .verificationCode(returnVerificationCode ? verificationCode : null)
                 .requiresOtp(false)
                 .faceVerificationRequired(false)
@@ -112,7 +128,7 @@ public class AuthService {
         if (!user.isEnabled()) {
             throw new IllegalArgumentException("Account is not active. Please verify your email.");
         }
-        if (user.getNin() == null || user.getNin().isBlank()) {
+        if (user.getNin() == null || user.getNin().isBlank() || !Boolean.TRUE.equals(user.getNinVerified())) {
             throw new IllegalStateException("This account cannot use face verification until identity onboarding is complete.");
         }
 
@@ -125,6 +141,63 @@ public class AuthService {
                 .faceVerificationRequired(true)
                 .faceChallengeToken(challenge.token())
                 .build();
+    }
+
+    private void requireIdentityMatch(
+            String source,
+            DojahGovernmentIdentityClient.IdentityRecord record,
+            RegisterRequest request
+    ) {
+        if (!sameName(record.firstName(), request.getFirstName())
+                || !sameName(record.lastName(), request.getLastName())) {
+            throw new IllegalArgumentException(source + " identity does not match the entered name");
+        }
+
+        if (record.dateOfBirth() == null || !record.dateOfBirth().equals(request.getDateOfBirth())) {
+            throw new IllegalArgumentException(source + " identity does not match the entered date of birth");
+        }
+
+        if (record.gender() != null && !record.gender().isBlank()
+                && request.getGender() != null && !request.getGender().isBlank()
+                && !normalizeGender(record.gender()).equals(normalizeGender(request.getGender()))) {
+            throw new IllegalArgumentException(source + " identity does not match the entered gender");
+        }
+    }
+
+    private void requireSamePerson(
+            DojahGovernmentIdentityClient.IdentityRecord bvn,
+            DojahGovernmentIdentityClient.IdentityRecord nin
+    ) {
+        boolean same = sameName(bvn.firstName(), nin.firstName())
+                && sameName(bvn.lastName(), nin.lastName())
+                && bvn.dateOfBirth() != null
+                && bvn.dateOfBirth().equals(nin.dateOfBirth());
+
+        if (!same) {
+            throw new IllegalArgumentException("BVN and NIN do not belong to the same verified identity");
+        }
+    }
+
+    private boolean sameName(String left, String right) {
+        return normalizeName(left).equals(normalizeName(right));
+    }
+
+    private String normalizeName(String value) {
+        if (value == null) return "";
+        String decomposed = Normalizer.normalize(value, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "");
+        return decomposed
+                .toUpperCase(Locale.ROOT)
+                .replaceAll("[^A-Z0-9]", "")
+                .trim();
+    }
+
+    private String normalizeGender(String value) {
+        if (value == null) return "";
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        if (normalized.equals("M")) return "MALE";
+        if (normalized.equals("F")) return "FEMALE";
+        return normalized;
     }
 
     private User requireUserByIdentifier(String identifier) {
