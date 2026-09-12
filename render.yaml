@@ -78,12 +78,12 @@ services:
       - key: WAVE_SMS_CHANNEL
         value: "dnd"
 
-      # Dojah liveness. Credentials stay server-side and are never returned
-      # to Android. Leave provider-configured false until sandbox testing passes.
+      # Active Dojah identity provider. Registration BVN/NIN checks and login
+      # liveness remain fail-closed if APP_ID/API_KEY are absent or rejected.
       - key: WAVE_LIVENESS_PROVIDER
         value: "DOJAH"
       - key: WAVE_LIVENESS_PROVIDER_CONFIGURED
-        value: "false"
+        value: "true"
       - key: WAVE_LIVENESS_WEBHOOK_SECRET
         generateValue: true
       - key: WAVE_DOJAH_BASE_URL
