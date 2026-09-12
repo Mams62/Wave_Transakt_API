@@ -72,11 +72,13 @@ wave:
 
   identity:
     liveness:
-      # Provider remains disabled until an approved liveness vendor is connected.
-      # Never set provider-configured=true until the provider callback is verified end to end.
-      provider: ${WAVE_LIVENESS_PROVIDER:UNCONFIGURED}
+      provider: ${WAVE_LIVENESS_PROVIDER:DOJAH}
       provider-configured: ${WAVE_LIVENESS_PROVIDER_CONFIGURED:false}
       webhook-secret: ${WAVE_LIVENESS_WEBHOOK_SECRET:}
+      dojah:
+        base-url: ${WAVE_DOJAH_BASE_URL:https://api.dojah.io}
+        app-id: ${WAVE_DOJAH_APP_ID:}
+        api-key: ${WAVE_DOJAH_API_KEY:}
 
   legacy:
     paystack-enabled: ${WAVE_LEGACY_PAYSTACK_ENABLED:false}
