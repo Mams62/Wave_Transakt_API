@@ -56,6 +56,8 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers("/api/verification/**")
                         .permitAll()
+                        .requestMatchers("/api/v1/identity/liveness/webhook")
+                        .permitAll()
                         .anyRequest()
                         .authenticated()
                 )
