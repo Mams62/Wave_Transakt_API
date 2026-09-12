@@ -7,6 +7,7 @@ import com.wavetransakt.identity.entity.LivenessStatus;
 import com.wavetransakt.identity.provider.DojahLivenessClient;
 import com.wavetransakt.identity.repository.LivenessSessionRepository;
 import com.wavetransakt.user.entity.User;
+import com.wavetransakt.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,7 @@ import java.util.UUID;
 public class LivenessService {
     private final LivenessSessionRepository repository;
     private final DojahLivenessClient dojahLivenessClient;
+    private final UserRepository userRepository;
 
     @Value("${wave.identity.liveness.provider:UNCONFIGURED}") private String provider;
     @Value("${wave.identity.liveness.webhook-secret:}") private String webhookSecret;
@@ -65,13 +67,19 @@ public class LivenessService {
                 return response(session, live, false, "Live-face verification failed.");
             }
 
-            // Only after liveness passes do we send the same transient selfie and
-            // the account-bound NIN server-to-server for identity matching.
             DojahLivenessClient.IdentityMatchResult identity = dojahLivenessClient.verifySelfieNin(user.getNin(), imageBase64);
             if (identity.match()) {
+                LocalDateTime verifiedAt = LocalDateTime.now();
                 session.setStatus(LivenessStatus.VERIFIED);
-                session.setVerifiedAt(LocalDateTime.now());
+                session.setVerifiedAt(verifiedAt);
                 session.setProviderMessage("Live face matched the verified account identity.");
+
+                if ("ENROLLMENT".equalsIgnoreCase(session.getPurpose())) {
+                    user.setFaceIdentityEnrolled(true);
+                    user.setFaceIdentityEnrolledAt(verifiedAt);
+                    userRepository.save(user);
+                    session.setProviderMessage("Face ID enrollment completed and matched the verified account identity.");
+                }
             } else {
                 session.setStatus(LivenessStatus.REJECTED);
                 session.setProviderMessage("Live face did not match the identity bound to this account.");
