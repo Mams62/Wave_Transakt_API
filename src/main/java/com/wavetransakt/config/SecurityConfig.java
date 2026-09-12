@@ -54,7 +54,9 @@ public class SecurityConfig {
                                 "/api/auth/login/otp",
                                 "/api/auth/login/face/start",
                                 "/api/auth/login/face/capture",
-                                "/api/auth/login/face/complete"
+                                "/api/auth/login/face/complete",
+                                "/api/auth/password/forgot",
+                                "/api/auth/password/reset"
                         )
                         .permitAll()
                         .requestMatchers("/api/verification/**")
