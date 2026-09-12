@@ -70,6 +70,14 @@ wave:
     sender-id: ${WAVE_SMS_SENDER_ID:WavePay}
     channel: ${WAVE_SMS_CHANNEL:dnd}
 
+  identity:
+    liveness:
+      # Provider remains disabled until an approved liveness vendor is connected.
+      # Never set provider-configured=true until the provider callback is verified end to end.
+      provider: ${WAVE_LIVENESS_PROVIDER:UNCONFIGURED}
+      provider-configured: ${WAVE_LIVENESS_PROVIDER_CONFIGURED:false}
+      webhook-secret: ${WAVE_LIVENESS_WEBHOOK_SECRET:}
+
   legacy:
     paystack-enabled: ${WAVE_LEGACY_PAYSTACK_ENABLED:false}
 
