@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -22,132 +23,126 @@ public class VerificationService {
 
     private final SecureRandom secureRandom = new SecureRandom();
 
-    /**
-     * Create a new 6-digit email verification code.
-     */
     @Transactional
     public String createEmailVerificationCode(User user) {
+        return createCode(user, VerificationType.EMAIL);
+    }
 
-        // Mark any previous unused email verification code as used.
-        verificationCodeRepository
-                .findTopByUserAndTypeAndUsedFalseOrderByCreatedAtDesc(
-                        user,
-                        VerificationType.EMAIL
-                )
-                .ifPresent(existingCode -> {
+    @Transactional
+    public String createPhoneVerificationCode(User user) {
+        return createCode(user, VerificationType.PHONE);
+    }
 
-                    existingCode.setUsed(true);
+    @Transactional
+    public String resendEmailVerification(String email) {
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Email is required");
+        }
 
-                    verificationCodeRepository.save(existingCode);
-                });
+        User user = userRepository
+                .findByEmail(email.trim().toLowerCase(Locale.ROOT))
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        // Generate a secure 6-digit code.
-        String code = String.format(
-                "%06d",
-                secureRandom.nextInt(1_000_000)
-        );
+        if (Boolean.TRUE.equals(user.getEmailVerified())) {
+            throw new IllegalArgumentException("Email is already verified");
+        }
 
-        // Create verification record.
-        VerificationCode verificationCode =
-                VerificationCode.builder()
-                        .user(user)
-                        .code(code)
-                        .type(VerificationType.EMAIL)
-                        .expiresAt(
-                                LocalDateTime.now().plusMinutes(10)
-                        )
-                        .used(false)
-                        .createdAt(LocalDateTime.now())
-                        .build();
+        return createEmailVerificationCode(user);
+    }
 
-        // IMPORTANT: Save the code to PostgreSQL.
-        verificationCodeRepository.save(verificationCode);
+    @Transactional
+    public void verifyEmail(String email, String code) {
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Email is required");
+        }
 
-        return code;
+        User user = userRepository
+                .findByEmail(email.trim().toLowerCase(Locale.ROOT))
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        verifyCode(user, VerificationType.EMAIL, code);
+
+        user.setEmailVerified(true);
+        user.setAccountStatus(AccountStatus.ACTIVE);
+        userRepository.save(user);
     }
 
     /**
-     * Verify a user's email using the latest unused code.
+     * Verifies a login OTP against the account identified by email or phone.
+     * A successful OTP does not by itself persist a trusted-device decision;
+     * the caller decides whether to issue a JWT after the challenge succeeds.
      */
     @Transactional
-    public void verifyEmail(
-            String email,
-            String code
-    ) {
+    public User verifyLoginPhoneCode(String identifier, String code) {
+        if (identifier == null || identifier.isBlank()) {
+            throw new IllegalArgumentException("Email or phone is required");
+        }
 
-        // Find user.
-        User user = userRepository
-                .findByEmail(email)
-                .orElseThrow(() ->
-                        new IllegalArgumentException(
-                                "User not found"
-                        )
-                );
+        String raw = identifier.trim();
+        User user = userRepository.findByEmail(raw.toLowerCase(Locale.ROOT))
+                .orElseGet(() -> userRepository.findByPhone(raw)
+                        .orElseThrow(() -> new IllegalArgumentException("User not found")));
 
-        // Find latest unused email verification code.
-        VerificationCode verificationCode =
-                verificationCodeRepository
-                        .findTopByUserAndTypeAndUsedFalseOrderByCreatedAtDesc(
-                                user,
-                                VerificationType.EMAIL
-                        )
-                        .orElseThrow(() ->
-                                new IllegalArgumentException(
-                                        "No active email verification code. Please request a new code."
-                                )
-                        );
+        verifyCode(user, VerificationType.PHONE, code);
+        return user;
+    }
 
-        // Check expiration.
-        if (verificationCode.getExpiresAt()
-                .isBefore(LocalDateTime.now())) {
+    @Transactional
+    public String createVerificationCode(User user) {
+        return createEmailVerificationCode(user);
+    }
 
+    private String createCode(User user, VerificationType type) {
+        if (user == null) {
+            throw new IllegalArgumentException("User is required");
+        }
+
+        verificationCodeRepository
+                .findTopByUserAndTypeAndUsedFalseOrderByCreatedAtDesc(user, type)
+                .ifPresent(existingCode -> {
+                    existingCode.setUsed(true);
+                    verificationCodeRepository.save(existingCode);
+                });
+
+        String code = String.format("%06d", secureRandom.nextInt(1_000_000));
+
+        VerificationCode verificationCode = VerificationCode.builder()
+                .user(user)
+                .code(code)
+                .type(type)
+                .expiresAt(LocalDateTime.now().plusMinutes(10))
+                .used(false)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        verificationCodeRepository.save(verificationCode);
+        return code;
+    }
+
+    private void verifyCode(User user, VerificationType type, String code) {
+        if (code == null || !code.matches("\\d{6}")) {
+            throw new IllegalArgumentException("Verification code must be exactly 6 digits");
+        }
+
+        VerificationCode verificationCode = verificationCodeRepository
+                .findTopByUserAndTypeAndUsedFalseOrderByCreatedAtDesc(user, type)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "No active verification code. Please request a new code."
+                ));
+
+        if (verificationCode.getExpiresAt().isBefore(LocalDateTime.now())) {
             verificationCode.setUsed(true);
-
-            verificationCodeRepository.save(
-                    verificationCode
-            );
-
+            verificationCodeRepository.save(verificationCode);
             throw new IllegalArgumentException(
                     "Verification code has expired. Please request a new code."
             );
         }
 
-        // Check code.
         if (!verificationCode.getCode().equals(code)) {
-
-            throw new IllegalArgumentException(
-                    "Invalid verification code"
-            );
+            throw new IllegalArgumentException("Invalid verification code");
         }
 
-        // Mark verification code as used.
         verificationCode.setUsed(true);
-
-        // Verify email.
-        user.setEmailVerified(true);
-
-        // Activate account.
-        user.setAccountStatus(
-                AccountStatus.ACTIVE
-        );
-
-        // Save both changes.
-        verificationCodeRepository.save(
-                verificationCode
-        );
-
-        userRepository.save(user);
-    }
-
-    /**
-     * Compatibility method.
-     *
-     * If any other part of the application calls
-     * createVerificationCode(), it will still work.
-     */
-    @Transactional
-    public String createVerificationCode(User user) {
-
-        return createEmailVerificationCode(user);
+        verificationCodeRepository.save(verificationCode);
     }
 }
