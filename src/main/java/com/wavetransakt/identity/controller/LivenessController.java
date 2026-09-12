@@ -1,5 +1,6 @@
 package com.wavetransakt.identity.controller;
 
+import com.wavetransakt.identity.dto.LivenessCaptureResponse;
 import com.wavetransakt.identity.dto.LivenessSessionResponse;
 import com.wavetransakt.identity.service.LivenessService;
 import com.wavetransakt.user.entity.User;
@@ -25,6 +26,24 @@ public class LivenessController {
         User user = requireUser(authentication);
         String purpose = request == null ? "LOGIN" : request.purpose();
         return ResponseEntity.ok(livenessService.start(user, purpose));
+    }
+
+    @PostMapping("/{sessionId}/capture")
+    public ResponseEntity<LivenessCaptureResponse> capture(
+            Authentication authentication,
+            @PathVariable UUID sessionId,
+            @RequestBody CaptureRequest request
+    ) {
+        if (request == null || request.image() == null || request.image().isBlank()) {
+            throw new IllegalArgumentException("Selfie image is required");
+        }
+        return ResponseEntity.ok(
+                livenessService.capture(
+                        requireUser(authentication),
+                        sessionId,
+                        request.image()
+                )
+        );
     }
 
     @GetMapping("/{sessionId}")
@@ -73,6 +92,8 @@ public class LivenessController {
     }
 
     public record StartRequest(String purpose) {}
+
+    public record CaptureRequest(String image) {}
 
     public record ProviderResultRequest(
             UUID sessionId,
