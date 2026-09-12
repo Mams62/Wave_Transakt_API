@@ -65,6 +65,13 @@ public class User {
     @Column(name = "government_identity_verified_at")
     private LocalDateTime governmentIdentityVerifiedAt;
 
+    @Column(name = "face_identity_enrolled", nullable = false)
+    @Builder.Default
+    private Boolean faceIdentityEnrolled = false;
+
+    @Column(name = "face_identity_enrolled_at")
+    private LocalDateTime faceIdentityEnrolledAt;
+
     @Column(length = 80)
     private String state;
 
