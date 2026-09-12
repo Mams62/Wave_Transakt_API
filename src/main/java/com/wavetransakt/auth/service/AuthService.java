@@ -84,6 +84,8 @@ public class AuthService {
                 .verificationCode(returnVerificationCode ? verificationCode : null)
                 .requiresOtp(false)
                 .faceVerificationRequired(false)
+                .restrictedOnboarding(false)
+                .identityVerificationRequired(false)
                 .build();
     }
 
@@ -114,6 +116,8 @@ public class AuthService {
                 .requiresOtp(true)
                 .maskedPhone(maskPhone(user.getPhone()))
                 .faceVerificationRequired(false)
+                .restrictedOnboarding(false)
+                .identityVerificationRequired(false)
                 .build();
     }
 
@@ -122,6 +126,11 @@ public class AuthService {
      * stored NIN but pre-date verified onboarding are upgraded here only after
      * the government provider confirms that NIN matches the account profile.
      * No JWT is issued until the subsequent live-face verification succeeds.
+     *
+     * When the external government-identity provider is unavailable, the server
+     * returns an explicit restricted-onboarding state instead of issuing a JWT.
+     * That state is only for a local setup experience and cannot access protected
+     * wallet, transfer, funding, QR, or payment APIs.
      */
     @Transactional
     public AuthResponse verifyLoginOtp(LoginOtpRequest request) {
@@ -131,7 +140,19 @@ public class AuthService {
             throw new IllegalArgumentException("Account is not active. Please verify your email.");
         }
 
-        ensureVerifiedNinForSecureLogin(user);
+        try {
+            ensureVerifiedNinForSecureLogin(user);
+        } catch (IllegalStateException providerUnavailable) {
+            return AuthResponse.builder()
+                    .message("Phone verified. Identity verification is temporarily unavailable. You may enter setup mode, but all financial services remain locked until NIN and live-face verification are completed.")
+                    .token(null)
+                    .requiresOtp(false)
+                    .faceVerificationRequired(false)
+                    .restrictedOnboarding(true)
+                    .identityVerificationRequired(true)
+                    .faceChallengeToken(null)
+                    .build();
+        }
 
         FaceLoginChallengeService.IssuedChallenge challenge = faceLoginChallengeService.issue(user);
 
@@ -140,6 +161,8 @@ public class AuthService {
                 .token(null)
                 .requiresOtp(false)
                 .faceVerificationRequired(true)
+                .restrictedOnboarding(false)
+                .identityVerificationRequired(false)
                 .faceChallengeToken(challenge.token())
                 .build();
     }
