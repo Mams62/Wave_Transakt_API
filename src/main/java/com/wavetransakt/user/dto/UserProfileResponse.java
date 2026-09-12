@@ -14,7 +14,9 @@ public record UserProfileResponse(
         String localGovernment,
         LocalDate dateOfBirth,
         String gender,
-        String walletNumber
+        String walletNumber,
+        boolean bvnVerified,
+        boolean ninVerified
 ) {
     public static UserProfileResponse from(
             User user,
@@ -29,7 +31,9 @@ public record UserProfileResponse(
                 user.getLocalGovernment(),
                 user.getDateOfBirth(),
                 user.getGender(),
-                walletNumber
+                walletNumber,
+                Boolean.TRUE.equals(user.getBvnVerified()),
+                Boolean.TRUE.equals(user.getNinVerified())
         );
     }
 }
