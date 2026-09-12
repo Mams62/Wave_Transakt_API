@@ -379,15 +379,36 @@ public class WemaWalletClient {
             throw providerRejected(response, fallback);
         }
 
+        // Wema's normal wallet-creation success flow explicitly returns PENDING.
+        // Do not collapse provider statuses into Wave onboarding statuses. Only
+        // reject clear provider failure values or server-side error text.
         if (statusNode.isTextual()) {
-            String status = statusNode.asText("").trim().toUpperCase(Locale.ROOT);
-            if (status.equals("FAILED") ||
-                    status.equals("FAILURE") ||
-                    status.equals("ERROR") ||
-                    status.equals("INVALID") ||
-                    status.equals("REJECTED")) {
+            String status = statusNode.asText("").trim();
+            String normalizedStatus = status.toUpperCase(Locale.ROOT);
+            if (normalizedStatus.equals("FAILED") ||
+                    normalizedStatus.equals("FAILURE") ||
+                    normalizedStatus.equals("ERROR") ||
+                    normalizedStatus.equals("INVALID") ||
+                    normalizedStatus.equals("REJECTED") ||
+                    isServerSideFailure(status)) {
                 throw providerRejected(response, fallback);
             }
+        }
+
+        // The provider's generic error envelope can carry an errorMessages array.
+        // Treat a populated provider error list as a rejection even when an APIM
+        // layer returned HTTP 200 or omitted hasError.
+        if (!firstProviderError(response).isBlank()) {
+            throw providerRejected(response, fallback);
+        }
+
+        // Some sandbox/provider failures have historically surfaced as a message
+        // such as "Invalid Server Error" instead of a canonical status value.
+        // Never allow those responses to advance onboarding or become a fake
+        // tracking/account state.
+        String providerMessage = message(response, "");
+        if (isServerSideFailure(providerMessage)) {
+            throw providerRejected(response, fallback);
         }
     }
 
@@ -396,14 +417,8 @@ public class WemaWalletClient {
             String fallback
     ) {
         String providerMessage = message(response, fallback);
-        String normalized = providerMessage.toLowerCase(Locale.ROOT);
 
-        // Responses such as "Invalid Server Error" are provider/server failures,
-        // not an onboarding status and not evidence that the user's NIN/OTP is bad.
-        if (normalized.contains("server error") ||
-                normalized.contains("internal server") ||
-                normalized.contains("service unavailable") ||
-                normalized.contains("gateway error")) {
+        if (isServerSideFailure(providerMessage)) {
             return new WemaProviderException(
                     "WEMA_UPSTREAM_ERROR",
                     "Wema Wallet Services reported a server-side error. The wallet remains in its previous onboarding state; retry after the sandbox/provider is healthy.",
@@ -418,6 +433,18 @@ public class WemaWalletClient {
         );
     }
 
+    private boolean isServerSideFailure(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String normalized = value.toLowerCase(Locale.ROOT);
+        return normalized.contains("server error") ||
+                normalized.contains("internal server") ||
+                normalized.contains("service unavailable") ||
+                normalized.contains("gateway error") ||
+                normalized.contains("bad gateway");
+    }
+
     private String message(JsonNode response, String fallback) {
         String value = firstExpectedText(
                 response,
@@ -427,7 +454,62 @@ public class WemaWalletClient {
                 "responseDescription",
                 "ResponseMessage"
         );
-        return value.isBlank() ? fallback : value;
+        if (!value.isBlank()) {
+            return value;
+        }
+
+        String providerError = firstProviderError(response);
+        return providerError.isBlank() ? fallback : providerError;
+    }
+
+    private String firstProviderError(JsonNode response) {
+        return firstRecursiveArrayText(
+                response,
+                "errorMessages",
+                "ErrorMessages"
+        );
+    }
+
+    private String firstRecursiveArrayText(JsonNode node, String... names) {
+        if (node == null || node.isNull() || node.isMissingNode()) {
+            return "";
+        }
+
+        if (node.isObject()) {
+            for (String name : names) {
+                JsonNode value = node.get(name);
+                if (value != null && value.isArray()) {
+                    for (JsonNode child : value) {
+                        if (child != null && child.isValueNode()) {
+                            String text = child.asText("").trim();
+                            if (!text.isBlank()) {
+                                return text;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
+            while (fields.hasNext()) {
+                String value = firstRecursiveArrayText(
+                        fields.next().getValue(),
+                        names
+                );
+                if (!value.isBlank()) {
+                    return value;
+                }
+            }
+        } else if (node.isArray()) {
+            for (JsonNode child : node) {
+                String value = firstRecursiveArrayText(child, names);
+                if (!value.isBlank()) {
+                    return value;
+                }
+            }
+        }
+
+        return "";
     }
 
     private String firstExpectedText(JsonNode response, String... names) {
