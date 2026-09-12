@@ -16,7 +16,8 @@ public record UserProfileResponse(
         String gender,
         String walletNumber,
         boolean bvnVerified,
-        boolean ninVerified
+        boolean ninVerified,
+        boolean faceIdentityEnrolled
 ) {
     public static UserProfileResponse from(
             User user,
@@ -33,7 +34,8 @@ public record UserProfileResponse(
                 user.getGender(),
                 walletNumber,
                 Boolean.TRUE.equals(user.getBvnVerified()),
-                Boolean.TRUE.equals(user.getNinVerified())
+                Boolean.TRUE.equals(user.getNinVerified()),
+                Boolean.TRUE.equals(user.getFaceIdentityEnrolled())
         );
     }
 }
