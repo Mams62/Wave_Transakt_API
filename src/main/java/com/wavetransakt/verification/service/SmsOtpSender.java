@@ -13,11 +13,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Sends Wave login OTPs through a Termii-compatible SMS endpoint.
- *
+ * Sends Wave security OTPs through a Termii-compatible SMS endpoint.
  * Credentials live only in the server environment. If the provider is not
  * configured this service reports "not configured" so controlled staging can
- * still expose the generated code only when WAVE_RETURN_VERIFICATION_CODE=true.
+ * expose generated codes only when WAVE_RETURN_VERIFICATION_CODE=true.
  */
 @Service
 @RequiredArgsConstructor
@@ -44,11 +43,29 @@ public class SmsOtpSender {
     }
 
     public boolean sendLoginOtp(String phoneNumber, String code) {
+        return sendOtp(
+                phoneNumber,
+                code,
+                "Your Wave Transakt login code is " + code + ". It expires in 10 minutes. Do not share this code.",
+                "login"
+        );
+    }
+
+    public boolean sendAccountRecoveryOtp(String phoneNumber, String code) {
+        return sendOtp(
+                phoneNumber,
+                code,
+                "Your Wave Transakt account PIN recovery code is " + code + ". It expires in 15 minutes. Do not share this code.",
+                "account recovery"
+        );
+    }
+
+    private boolean sendOtp(String phoneNumber, String code, String message, String purpose) {
         if (!isConfigured()) {
             return false;
         }
         if (code == null || !code.matches("\\d{6}")) {
-            throw new IllegalArgumentException("Login OTP must be 6 digits");
+            throw new IllegalArgumentException("Security OTP must be 6 digits");
         }
 
         String to = normalizeNigerianPhone(phoneNumber);
@@ -58,7 +75,7 @@ public class SmsOtpSender {
         body.put("api_key", apiKey.trim());
         body.put("to", to);
         body.put("from", senderId.trim());
-        body.put("sms", "Your Wave Transakt login code is " + code + ". It expires in 10 minutes. Do not share this code.");
+        body.put("sms", message);
         body.put("type", "plain");
         body.put("channel", channel == null || channel.isBlank() ? "dnd" : channel.trim());
 
@@ -74,7 +91,7 @@ public class SmsOtpSender {
             return true;
         } catch (RestClientResponseException e) {
             throw new IllegalStateException(
-                    "Unable to deliver the login OTP to the registered phone number",
+                    "Unable to deliver the " + purpose + " code to the registered phone number",
                     e
             );
         }
