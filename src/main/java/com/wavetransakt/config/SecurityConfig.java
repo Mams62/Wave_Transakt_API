@@ -21,17 +21,10 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(
-            HttpSecurity http
-    ) throws Exception {
-
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                .sessionManagement(
-                        session -> session.sessionCreationPolicy(
-                                SessionCreationPolicy.STATELESS
-                        )
-                )
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setStatus(401);
@@ -48,25 +41,23 @@ public class SecurityConfig {
                             );
                         })
                 )
-                .authorizeHttpRequests(
-                        auth -> auth
-                                .requestMatchers(
-                                        "/",
-                                        "/error",
-                                        "/api/health"
-                                )
-                                .permitAll()
-                                .requestMatchers(
-                                        "/api/auth/register",
-                                        "/api/auth/login"
-                                )
-                                .permitAll()
-                                .requestMatchers(
-                                        "/api/verification/**"
-                                )
-                                .permitAll()
-                                .anyRequest()
-                                .authenticated()
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(
+                                "/",
+                                "/error",
+                                "/api/health"
+                        )
+                        .permitAll()
+                        .requestMatchers(
+                                "/api/auth/register",
+                                "/api/auth/login",
+                                "/api/auth/login/otp"
+                        )
+                        .permitAll()
+                        .requestMatchers("/api/verification/**")
+                        .permitAll()
+                        .anyRequest()
+                        .authenticated()
                 )
                 .addFilterBefore(
                         jwtAuthenticationFilter,
