@@ -121,7 +121,7 @@ public class WemaWalletClient {
         body.put("trackingId", trackingId.trim());
 
         JsonNode response = post(
-                "/wallet-creation/api/CustomerAccount/GenerateWalletAccountForPartnershipsV2/Otp",
+                "/wallet-creation/api/CustomerAccount/GenerateWalletAccountForPartnershipsV2/otp",
                 body
         );
 
@@ -170,9 +170,6 @@ public class WemaWalletClient {
             accountNumber = text(response, "accountNumber");
         }
         if (accountNumber.isBlank()) {
-            // Final compatibility fallback for older Wema envelopes. Restrict
-            // the search to accountNumber/NUBAN fields so wrapper status values
-            // can never be mistaken for wallet data.
             accountNumber = firstRecursiveText(
                     response,
                     "accountNumber",
@@ -208,9 +205,6 @@ public class WemaWalletClient {
         JsonNode response = exchange(url, HttpMethod.GET, null);
         assertSuccessful(response, "Unable to retrieve Wema wallet balance");
 
-        // Wema Account Management returns the wallet details in `result`.
-        // Some older environments use `data`, so support that without doing an
-        // unrestricted recursive status lookup.
         JsonNode payload = response.path("result");
         if (!payload.isObject()) {
             payload = response.path("data");
@@ -267,8 +261,6 @@ public class WemaWalletClient {
             java.net.URI uri = java.net.URI.create(configuredBase);
             host = uri.getHost() == null ? "" : uri.getHost();
         } catch (Exception ignored) {
-            // The boolean below communicates invalid configuration without
-            // exposing any credential value.
         }
 
         boolean httpsGateway = configuredBase.startsWith("https://") &&
@@ -369,12 +361,6 @@ public class WemaWalletClient {
         }
     }
 
-    /**
-     * Interpret Wema's documented response envelope without treating a valid
-     * PENDING onboarding state as an error. We intentionally avoid recursively
-     * reading arbitrary `responseCode` fields because nested domain objects can
-     * contain unrelated codes.
-     */
     private void assertSuccessful(JsonNode response, String fallback) {
         JsonNode statusNode = response.path("status");
 
