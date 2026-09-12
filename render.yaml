@@ -9,8 +9,6 @@ services:
     healthCheckPath: /api/health
     autoDeployTrigger: commit
     envVars:
-      # Spring/JDBC needs a jdbc:postgresql URL. Keep Render Postgres values
-      # split so application.yml can safely assemble the JDBC URL.
       - key: WAVE_DB_HOST
         fromDatabase:
           name: wave-transakt-staging-db
@@ -43,7 +41,6 @@ services:
       - key: WAVE_RETURN_VERIFICATION_CODE
         value: "true"
 
-      # Controlled-stage safety switches. Wema remains the wallet source of funds.
       - key: WAVE_LEGACY_PAYSTACK_ENABLED
         value: "false"
       - key: WAVE_LOCAL_MONEY_MOVEMENT_ENABLED
@@ -70,6 +67,16 @@ services:
         sync: false
       - key: WAVE_WEMA_ACCESS_KEY
         sync: false
+
+      # Registered-phone login OTP delivery. Configure these only in Render.
+      - key: WAVE_SMS_BASE_URL
+        sync: false
+      - key: WAVE_SMS_API_KEY
+        sync: false
+      - key: WAVE_SMS_SENDER_ID
+        sync: false
+      - key: WAVE_SMS_CHANNEL
+        value: "dnd"
 
       - key: WAVE_VTPASS_BASE_URL
         value: "https://sandbox.vtpass.com/api/"
