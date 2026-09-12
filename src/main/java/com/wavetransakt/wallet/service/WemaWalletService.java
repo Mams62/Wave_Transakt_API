@@ -161,13 +161,11 @@ public class WemaWalletService {
 
         String onboardingStatus = wallet.getProviderStatus().name();
         String accountStatus = null;
-        String providerMessage = wallet.getProviderMessage();
+        String providerMessage = wallet.getProviderStatus() == WemaWalletStatus.NOT_STARTED
+                ? null
+                : wallet.getProviderMessage();
         boolean balanceFresh = false;
 
-        // Before Wema assigns a NUBAN, the local zero projection is harmless and
-        // simply represents that no bank wallet is available yet. Once a NUBAN
-        // exists, never display an old local projection as if it were fresh Wema
-        // money when the provider refresh fails.
         BigDecimal visibleBalance = wallet.getProviderAccountNumber() == null
                 ? wallet.getBalance()
                 : BigDecimal.ZERO;
@@ -242,13 +240,9 @@ public class WemaWalletService {
             );
         }
 
-        if (!diagnostics.subscriptionKeyConfigured()) {
-            throw new WemaProviderException(
-                    "WEMA_SUBSCRIPTION_KEY_MISSING",
-                    "Wema Wallet Services subscription key is missing from the Wave server. Re-add WAVE_WEMA_WALLET_SUBSCRIPTION_KEY in Render and redeploy.",
-                    null
-            );
-        }
+        // Wema's current Wallet Creation documentation requires x-api-key.
+        // Some APIM subscriptions also issue Ocp-Apim-Subscription-Key; when
+        // present the client sends it, but it is not a universal prerequisite.
     }
 
     private User requireUser(UUID userId) {
