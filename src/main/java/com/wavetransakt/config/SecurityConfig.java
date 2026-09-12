@@ -51,7 +51,10 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/auth/register",
                                 "/api/auth/login",
-                                "/api/auth/login/otp"
+                                "/api/auth/login/otp",
+                                "/api/auth/login/face/start",
+                                "/api/auth/login/face/capture",
+                                "/api/auth/login/face/complete"
                         )
                         .permitAll()
                         .requestMatchers("/api/verification/**")
