@@ -62,6 +62,14 @@ wave:
   demo:
     return-verification-code: ${WAVE_RETURN_VERIFICATION_CODE:false}
 
+  app:
+    android:
+      latest-version-code: ${WAVE_ANDROID_LATEST_VERSION_CODE:1}
+      latest-version-name: ${WAVE_ANDROID_LATEST_VERSION_NAME:1.0}
+      download-url: ${WAVE_ANDROID_DOWNLOAD_URL:}
+      force-update: ${WAVE_ANDROID_FORCE_UPDATE:false}
+      release-notes: ${WAVE_ANDROID_RELEASE_NOTES:}
+
   sms:
     # Termii-compatible messaging endpoint. BASE URL must come from the SMS
     # provider dashboard and credentials must stay only in Render.
