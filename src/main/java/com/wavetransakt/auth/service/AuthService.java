@@ -127,10 +127,9 @@ public class AuthService {
      * the government provider confirms that NIN matches the account profile.
      * No JWT is issued until the subsequent live-face verification succeeds.
      *
-     * When the external government-identity provider is unavailable, the server
-     * returns an explicit restricted-onboarding state instead of issuing a JWT.
-     * That state is only for a local setup experience and cannot access protected
-     * wallet, transfer, funding, QR, or payment APIs.
+     * If the external identity provider is not configured or is temporarily
+     * unavailable, the server returns a restricted setup state. This never issues
+     * a JWT and never unlocks wallet, transfer, funding, QR, or payment APIs.
      */
     @Transactional
     public AuthResponse verifyLoginOtp(LoginOtpRequest request) {
@@ -140,18 +139,24 @@ public class AuthService {
             throw new IllegalArgumentException("Account is not active. Please verify your email.");
         }
 
-        try {
-            ensureVerifiedNinForSecureLogin(user);
-        } catch (IllegalStateException providerUnavailable) {
-            return AuthResponse.builder()
-                    .message("Phone verified. Identity verification is temporarily unavailable. You may enter setup mode, but all financial services remain locked until NIN and live-face verification are completed.")
-                    .token(null)
-                    .requiresOtp(false)
-                    .faceVerificationRequired(false)
-                    .restrictedOnboarding(true)
-                    .identityVerificationRequired(true)
-                    .faceChallengeToken(null)
-                    .build();
+        if (!Boolean.TRUE.equals(user.getNinVerified())) {
+            if (user.getNin() == null || user.getNin().isBlank()) {
+                throw new IllegalArgumentException(
+                        "Identity onboarding is incomplete for this account. A verified NIN is required before secure face login."
+                );
+            }
+
+            // Do not call an unconfigured provider just to generate an avoidable 503.
+            // The user can enter setup mode, but no authenticated token is created.
+            if (!governmentIdentityClient.isConfigured()) {
+                return restrictedIdentitySetupResponse();
+            }
+
+            try {
+                ensureVerifiedNinForSecureLogin(user);
+            } catch (IllegalStateException providerUnavailable) {
+                return restrictedIdentitySetupResponse();
+            }
         }
 
         FaceLoginChallengeService.IssuedChallenge challenge = faceLoginChallengeService.issue(user);
@@ -164,6 +169,18 @@ public class AuthService {
                 .restrictedOnboarding(false)
                 .identityVerificationRequired(false)
                 .faceChallengeToken(challenge.token())
+                .build();
+    }
+
+    private AuthResponse restrictedIdentitySetupResponse() {
+        return AuthResponse.builder()
+                .message("Phone verified. Identity verification is temporarily unavailable. Setup mode is available, but all financial services remain locked until NIN and live-face verification are completed.")
+                .token(null)
+                .requiresOtp(false)
+                .faceVerificationRequired(false)
+                .restrictedOnboarding(true)
+                .identityVerificationRequired(true)
+                .faceChallengeToken(null)
                 .build();
     }
 
