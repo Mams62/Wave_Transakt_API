@@ -118,8 +118,10 @@ public class AuthService {
     }
 
     /**
-     * OTP success is now only the second factor. It creates a short-lived opaque
-     * pre-auth challenge; it never returns a wallet/API JWT.
+     * OTP success is only the second factor. Legacy accounts that already have a
+     * stored NIN but pre-date verified onboarding are upgraded here only after
+     * the government provider confirms that NIN matches the account profile.
+     * No JWT is issued until the subsequent live-face verification succeeds.
      */
     @Transactional
     public AuthResponse verifyLoginOtp(LoginOtpRequest request) {
@@ -128,19 +130,53 @@ public class AuthService {
         if (!user.isEnabled()) {
             throw new IllegalArgumentException("Account is not active. Please verify your email.");
         }
-        if (user.getNin() == null || user.getNin().isBlank() || !Boolean.TRUE.equals(user.getNinVerified())) {
-            throw new IllegalArgumentException("Identity onboarding is incomplete for this account. Complete verified NIN onboarding before using secure face login.");
-        }
+
+        ensureVerifiedNinForSecureLogin(user);
 
         FaceLoginChallengeService.IssuedChallenge challenge = faceLoginChallengeService.issue(user);
 
         return AuthResponse.builder()
-                .message("Phone verified. Complete live face verification to finish signing in.")
+                .message("Phone and government identity verified. Complete live face verification to finish signing in.")
                 .token(null)
                 .requiresOtp(false)
                 .faceVerificationRequired(true)
                 .faceChallengeToken(challenge.token())
                 .build();
+    }
+
+    private void ensureVerifiedNinForSecureLogin(User user) {
+        if (Boolean.TRUE.equals(user.getNinVerified())) {
+            return;
+        }
+
+        if (user.getNin() == null || user.getNin().isBlank()) {
+            throw new IllegalArgumentException(
+                    "Identity onboarding is incomplete for this account. A verified NIN is required before secure face login."
+            );
+        }
+
+        DojahGovernmentIdentityClient.IdentityRecord ninRecord = governmentIdentityClient.lookupNin(user.getNin());
+
+        if (!sameName(ninRecord.firstName(), user.getFirstName())
+                || !sameName(ninRecord.lastName(), user.getLastName())) {
+            throw new IllegalArgumentException("The NIN on this account does not match the account holder name.");
+        }
+
+        if (user.getDateOfBirth() == null
+                || ninRecord.dateOfBirth() == null
+                || !ninRecord.dateOfBirth().equals(user.getDateOfBirth())) {
+            throw new IllegalArgumentException("The NIN on this account does not match the account holder date of birth.");
+        }
+
+        if (ninRecord.gender() != null && !ninRecord.gender().isBlank()
+                && user.getGender() != null && !user.getGender().isBlank()
+                && !normalizeGender(ninRecord.gender()).equals(normalizeGender(user.getGender()))) {
+            throw new IllegalArgumentException("The NIN on this account does not match the account holder gender.");
+        }
+
+        user.setNinVerified(true);
+        user.setGovernmentIdentityVerifiedAt(LocalDateTime.now());
+        userRepository.save(user);
     }
 
     private void requireIdentityMatch(
