@@ -1,11 +1,13 @@
 package com.wavetransakt.auth.service;
 
 import com.wavetransakt.auth.dto.AuthResponse;
+import com.wavetransakt.auth.dto.LoginOtpRequest;
 import com.wavetransakt.security.JwtService;
 import com.wavetransakt.user.dto.LoginRequest;
 import com.wavetransakt.user.dto.RegisterRequest;
 import com.wavetransakt.user.entity.User;
 import com.wavetransakt.user.repository.UserRepository;
+import com.wavetransakt.verification.service.SmsOtpSender;
 import com.wavetransakt.verification.service.VerificationService;
 import com.wavetransakt.wallet.service.WalletService;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final WalletService walletService;
     private final VerificationService verificationService;
+    private final SmsOtpSender smsOtpSender;
 
     @Value("${wave.demo.return-verification-code:false}")
     private boolean returnVerificationCode;
@@ -59,9 +62,6 @@ public class AuthService {
                 .lastName(request.getLastName().trim())
                 .email(email)
                 .phone(phone)
-                // The existing database column is named `password`, but it now stores
-                // the BCrypt hash of the user's six-digit account PIN. The raw PIN is
-                // never persisted or returned by the API.
                 .password(passwordEncoder.encode(request.getAccountPin()))
                 .bvn(bvn)
                 .nin(nin)
@@ -75,38 +75,26 @@ public class AuthService {
                 .build();
 
         user = userRepository.save(user);
-
         walletService.createWallet(user);
 
         String verificationCode =
                 verificationService.createEmailVerificationCode(user);
 
         return AuthResponse.builder()
-                .message(
-                        "Registration successful. Please verify your email."
-                )
-                .verificationCode(
-                        returnVerificationCode ? verificationCode : null
-                )
+                .message("Registration successful. Please verify your email.")
+                .verificationCode(returnVerificationCode ? verificationCode : null)
+                .requiresOtp(false)
+                .faceVerificationRequired(false)
                 .build();
     }
 
-    @Transactional(readOnly = true)
+    /**
+     * Credential login is now a challenge-start operation. A JWT is not returned
+     * until the OTP sent to the registered phone number has been verified.
+     */
+    @Transactional
     public AuthResponse login(LoginRequest request) {
-        String identifier = request.getIdentifier().trim();
-        String emailIdentifier = identifier.toLowerCase(Locale.ROOT);
-
-        User user = userRepository
-                .findByEmail(emailIdentifier)
-                .orElseGet(() ->
-                        userRepository
-                                .findByPhone(identifier)
-                                .orElseThrow(() ->
-                                        new IllegalArgumentException(
-                                                "Invalid email/phone or account PIN"
-                                        )
-                                )
-                );
+        User user = requireUserByIdentifier(request.getIdentifier());
 
         if (!passwordEncoder.matches(
                 request.getAccountPin(),
@@ -123,14 +111,84 @@ public class AuthService {
             );
         }
 
+        String otp = verificationService.createPhoneVerificationCode(user);
+        boolean delivered = smsOtpSender.sendLoginOtp(user.getPhone(), otp);
+
+        if (!delivered && !returnVerificationCode) {
+            throw new IllegalStateException(
+                    "Phone verification is temporarily unavailable. Please try again later."
+            );
+        }
+
+        return AuthResponse.builder()
+                .message(
+                        delivered
+                                ? "A 6-digit login code was sent to your registered phone number."
+                                : "Controlled-stage login code generated. Configure the SMS provider before production."
+                )
+                .verificationCode(returnVerificationCode ? otp : null)
+                .requiresOtp(true)
+                .maskedPhone(maskPhone(user.getPhone()))
+                .faceVerificationRequired(false)
+                .build();
+    }
+
+    @Transactional
+    public AuthResponse verifyLoginOtp(LoginOtpRequest request) {
+        User user = verificationService.verifyLoginPhoneCode(
+                request.getIdentifier(),
+                request.getOtp()
+        );
+
+        if (!user.isEnabled()) {
+            throw new IllegalArgumentException(
+                    "Account is not active. Please verify your email."
+            );
+        }
+
         String token = jwtService.generateToken(
                 user.getId(),
                 user.getEmail()
         );
 
         return AuthResponse.builder()
-                .message("Login successful")
+                .message("Login verified successfully")
                 .token(token)
+                .requiresOtp(false)
+                // Cross-device face matching must remain false until a real
+                // liveness/identity provider performs server-side verification.
+                .faceVerificationRequired(false)
                 .build();
+    }
+
+    private User requireUserByIdentifier(String identifier) {
+        if (identifier == null || identifier.isBlank()) {
+            throw new IllegalArgumentException("Email or phone is required");
+        }
+
+        String raw = identifier.trim();
+        return userRepository
+                .findByEmail(raw.toLowerCase(Locale.ROOT))
+                .orElseGet(() ->
+                        userRepository
+                                .findByPhone(raw)
+                                .orElseThrow(() ->
+                                        new IllegalArgumentException(
+                                                "Invalid email/phone or account PIN"
+                                        )
+                                )
+                );
+    }
+
+    private String maskPhone(String phone) {
+        if (phone == null || phone.isBlank()) {
+            return "registered phone";
+        }
+
+        String digits = phone.replaceAll("[^0-9]", "");
+        if (digits.length() <= 4) {
+            return "****";
+        }
+        return "***" + digits.substring(digits.length() - 4);
     }
 }
