@@ -129,7 +129,7 @@ public class AuthService {
             throw new IllegalArgumentException("Account is not active. Please verify your email.");
         }
         if (user.getNin() == null || user.getNin().isBlank() || !Boolean.TRUE.equals(user.getNinVerified())) {
-            throw new IllegalStateException("This account cannot use face verification until identity onboarding is complete.");
+            throw new IllegalArgumentException("Identity onboarding is incomplete for this account. Complete verified NIN onboarding before using secure face login.");
         }
 
         FaceLoginChallengeService.IssuedChallenge challenge = faceLoginChallengeService.issue(user);
