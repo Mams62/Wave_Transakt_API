@@ -20,6 +20,7 @@ import java.math.BigDecimal;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -379,7 +380,7 @@ public class WemaWalletClient {
         }
 
         if (statusNode.isTextual()) {
-            String status = statusNode.asText("").trim().toUpperCase();
+            String status = statusNode.asText("").trim().toUpperCase(Locale.ROOT);
             if (status.equals("FAILED") ||
                     status.equals("FAILURE") ||
                     status.equals("ERROR") ||
@@ -394,9 +395,25 @@ public class WemaWalletClient {
             JsonNode response,
             String fallback
     ) {
+        String providerMessage = message(response, fallback);
+        String normalized = providerMessage.toLowerCase(Locale.ROOT);
+
+        // Responses such as "Invalid Server Error" are provider/server failures,
+        // not an onboarding status and not evidence that the user's NIN/OTP is bad.
+        if (normalized.contains("server error") ||
+                normalized.contains("internal server") ||
+                normalized.contains("service unavailable") ||
+                normalized.contains("gateway error")) {
+            return new WemaProviderException(
+                    "WEMA_UPSTREAM_ERROR",
+                    "Wema Wallet Services reported a server-side error. The wallet remains in its previous onboarding state; retry after the sandbox/provider is healthy.",
+                    null
+            );
+        }
+
         return new WemaProviderException(
                 "WEMA_REQUEST_REJECTED",
-                message(response, fallback),
+                providerMessage,
                 null
         );
     }
@@ -519,10 +536,7 @@ public class WemaWalletClient {
     public record ProviderMessage(String message) {
     }
 
-    public record PartnershipAccountDetails(
-            String accountNumber,
-            String message
-    ) {
+    public record PartnershipAccountDetails(String accountNumber, String message) {
     }
 
     public record WalletAccountDetails(
