@@ -1,6 +1,7 @@
 package com.wavetransakt.auth.controller;
 
 import com.wavetransakt.auth.dto.AuthResponse;
+import com.wavetransakt.auth.dto.LoginOtpRequest;
 import com.wavetransakt.auth.service.AuthService;
 import com.wavetransakt.user.dto.LoginRequest;
 import com.wavetransakt.user.dto.RegisterRequest;
@@ -26,18 +27,23 @@ public class AuthController {
     public ResponseEntity<AuthResponse> register(
             @Valid @RequestBody RegisterRequest request
     ) {
-        return ResponseEntity.ok(
-                authService.register(request)
-        );
+        return ResponseEntity.ok(authService.register(request));
     }
 
+    /** Starts a credential login challenge. No JWT is issued yet. */
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(
             @Valid @RequestBody LoginRequest request
     ) {
-        return ResponseEntity.ok(
-                authService.login(request)
-        );
+        return ResponseEntity.ok(authService.login(request));
+    }
+
+    /** Completes the registered-phone OTP challenge and only then issues a JWT. */
+    @PostMapping("/login/otp")
+    public ResponseEntity<AuthResponse> verifyLoginOtp(
+            @Valid @RequestBody LoginOtpRequest request
+    ) {
+        return ResponseEntity.ok(authService.verifyLoginOtp(request));
     }
 
     @GetMapping("/me")
