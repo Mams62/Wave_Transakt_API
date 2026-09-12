@@ -15,59 +15,34 @@ public class PasswordResetController {
 
     private final PasswordResetService passwordResetService;
 
-    /**
-     * Request a password reset code.
-     *
-     * DEMO MODE:
-     * Returns the code directly.
-     *
-     * Production should send the code
-     * through email/SMS instead.
-     */
     @PostMapping("/forgot")
-    public ResponseEntity<?> forgotPassword(
-            @Valid @RequestBody
-            ForgotPasswordRequest request
+    public ResponseEntity<PasswordResetResponse> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request
     ) {
-
-        String code =
-                passwordResetService
-                        .requestPasswordReset(request);
-
+        String controlledCode = passwordResetService.requestPasswordReset(request);
         return ResponseEntity.ok(
                 new PasswordResetResponse(
-                        "Password reset code generated",
-                        code
+                        "If the account exists, a recovery code has been sent to its registered phone number.",
+                        controlledCode
                 )
         );
     }
 
-    /**
-     * Reset password using the reset code.
-     */
     @PostMapping("/reset")
-    public ResponseEntity<?> resetPassword(
-            @Valid @RequestBody
-            ResetPasswordRequest request
+    public ResponseEntity<PasswordResetResponse> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request
     ) {
-
-        passwordResetService
-                .resetPassword(request);
-
+        passwordResetService.resetPassword(request);
         return ResponseEntity.ok(
                 new PasswordResetResponse(
-                        "Password reset successful",
+                        "Account PIN reset successful. Sign in with your new PIN.",
                         null
                 )
         );
     }
 
-    /**
-     * Small response object.
-     */
     public record PasswordResetResponse(
             String message,
             String resetCode
-    ) {
-    }
+    ) {}
 }
