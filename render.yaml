@@ -78,6 +78,15 @@ services:
       - key: WAVE_SMS_CHANNEL
         value: "dnd"
 
+      # Liveness / identity provider. Keep disabled until an approved provider
+      # is connected and its signed callback has been tested end to end.
+      - key: WAVE_LIVENESS_PROVIDER
+        value: "UNCONFIGURED"
+      - key: WAVE_LIVENESS_PROVIDER_CONFIGURED
+        value: "false"
+      - key: WAVE_LIVENESS_WEBHOOK_SECRET
+        generateValue: true
+
       - key: WAVE_VTPASS_BASE_URL
         value: "https://sandbox.vtpass.com/api/"
       - key: WAVE_VTPASS_API_KEY
