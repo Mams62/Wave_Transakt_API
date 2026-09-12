@@ -30,6 +30,16 @@ public class AuthResponse {
     private Boolean faceVerificationRequired;
 
     /**
+     * True only for a non-authenticated setup experience after the account PIN and
+     * registered-phone OTP have been verified but the government identity provider
+     * is unavailable. This state never carries a JWT and grants no wallet access.
+     */
+    private Boolean restrictedOnboarding;
+
+    /** True when financial access remains blocked until government identity checks complete. */
+    private Boolean identityVerificationRequired;
+
+    /**
      * Short-lived opaque pre-auth challenge. It is not a JWT and grants no access to
      * authenticated wallet APIs. It is returned only after the phone OTP succeeds.
      */
