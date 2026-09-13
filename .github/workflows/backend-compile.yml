@@ -33,4 +33,4 @@ jobs:
         run: mvn -B -DskipTests package
 
       - name: Run merchant safety unit tests
-        run: mvn -B -Dtest=MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest test
+        run: mvn -B -Dtest=MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,PosClientServiceTest test
