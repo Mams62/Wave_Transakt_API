@@ -1,5 +1,6 @@
 package com.wavetransakt.merchant.controller;
 
+import com.wavetransakt.merchant.provider.InterswitchProvisioningReadiness;
 import com.wavetransakt.merchant.provider.MerchantAcquiringProvider;
 import com.wavetransakt.user.entity.User;
 import org.springframework.http.ResponseEntity;
@@ -13,7 +14,7 @@ import java.util.List;
 /**
  * Safe provider capability diagnostics for Wave Business.
  *
- * This endpoint reports configuration/capability state only. It does not expose
+ * These endpoints report configuration/capability state only. They do not expose
  * credentials, merchant codes, terminal IDs, access tokens, provider payloads,
  * card data, settlement accounts or payment execution operations.
  */
@@ -22,9 +23,14 @@ import java.util.List;
 public class MerchantAcquiringController {
 
     private final List<MerchantAcquiringProvider> providers;
+    private final InterswitchProvisioningReadiness interswitchProvisioningReadiness;
 
-    public MerchantAcquiringController(List<MerchantAcquiringProvider> providers) {
+    public MerchantAcquiringController(
+            List<MerchantAcquiringProvider> providers,
+            InterswitchProvisioningReadiness interswitchProvisioningReadiness
+    ) {
         this.providers = providers;
+        this.interswitchProvisioningReadiness = interswitchProvisioningReadiness;
     }
 
     @GetMapping("/diagnostics")
@@ -51,6 +57,18 @@ public class MerchantAcquiringController {
                 .toList();
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Returns a non-secret checklist for the next provider integration milestone.
+     * A false readiness flag must never be bypassed by the mobile/POS clients.
+     */
+    @GetMapping("/provisioning-readiness")
+    public ResponseEntity<InterswitchProvisioningReadiness.Readiness> provisioningReadiness(
+            Authentication authentication
+    ) {
+        authenticatedUser(authentication);
+        return ResponseEntity.ok(interswitchProvisioningReadiness.snapshot());
     }
 
     private User authenticatedUser(Authentication authentication) {
