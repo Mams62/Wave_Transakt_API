@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -75,6 +76,33 @@ public final class MerchantDtos {
             String receiptNumber,
             String settlementStatus,
             String providerCode,
+            LocalDateTime createdAt
+    ) {
+    }
+
+    public record SettlementBatchResponse(
+            UUID id,
+            String providerCode,
+            String currency,
+            BigDecimal grossAmount,
+            BigDecimal feeAmount,
+            BigDecimal netAmount,
+            Integer paymentCount,
+            String status,
+            LocalDate settlementDate,
+            LocalDateTime createdAt
+    ) {
+    }
+
+    public record ReconciliationItemResponse(
+            UUID id,
+            UUID paymentId,
+            String paymentReference,
+            BigDecimal expectedAmount,
+            BigDecimal providerAmount,
+            BigDecimal differenceAmount,
+            String status,
+            String reason,
             LocalDateTime createdAt
     ) {
     }
