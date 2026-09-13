@@ -10,13 +10,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Locale;
 import java.util.UUID;
 
-/**
- * Applies trusted provider-assigned terminal linkage to a Wave POS record.
- *
- * No public HTTP controller calls this service. It is reserved for a future
- * provider adapter after the approved acquirer returns a genuine terminal
- * assignment under Wave Transakt's contracted integration.
- */
 @Service
 @RequiredArgsConstructor
 public class ProviderTerminalLinkService {
@@ -31,10 +24,7 @@ public class ProviderTerminalLinkService {
 
         String providerCode = normalizeRequired(assignment.providerCode(), "Provider code")
                 .toUpperCase(Locale.ROOT);
-        String providerTerminalId = normalizeRequired(
-                assignment.providerTerminalId(),
-                "Provider terminal ID"
-        );
+        String providerTerminalId = normalizeRequired(assignment.providerTerminalId(), "Provider terminal ID");
 
         PosTerminal terminal = posTerminalRepository.findById(assignment.terminalId())
                 .orElseThrow(() -> new IllegalArgumentException("POS terminal not found"));
@@ -47,15 +37,17 @@ public class ProviderTerminalLinkService {
             boolean sameAssignment = providerCode.equals(terminal.getProviderCode())
                     && providerTerminalId.equals(terminal.getProviderTerminalId());
             if (!sameAssignment) {
-                throw new IllegalStateException(
-                        "POS terminal is already linked to a different provider assignment"
-                );
+                throw new IllegalStateException("POS terminal is already linked to a different provider assignment");
             }
         }
 
+        boolean cardApproved = assignment.cardAcceptanceApproved();
+        boolean contactlessApproved = cardApproved && assignment.contactlessApproved();
+
         terminal.setProviderCode(providerCode);
         terminal.setProviderTerminalId(providerTerminalId);
-        terminal.setSupportsNfc(assignment.contactlessApproved());
+        terminal.setSupportsCard(cardApproved);
+        terminal.setSupportsNfc(contactlessApproved);
         terminal.setStatus(PosTerminalStatus.ACTIVE);
 
         return posTerminalRepository.save(terminal);
@@ -75,22 +67,19 @@ public class ProviderTerminalLinkService {
     public PosTerminal retire(UUID terminalId) {
         PosTerminal terminal = requireTerminal(terminalId);
         terminal.setStatus(PosTerminalStatus.RETIRED);
+        terminal.setSupportsCard(false);
         terminal.setSupportsNfc(false);
         return posTerminalRepository.save(terminal);
     }
 
     private PosTerminal requireTerminal(UUID terminalId) {
-        if (terminalId == null) {
-            throw new IllegalArgumentException("Terminal ID is required");
-        }
+        if (terminalId == null) throw new IllegalArgumentException("Terminal ID is required");
         return posTerminalRepository.findById(terminalId)
                 .orElseThrow(() -> new IllegalArgumentException("POS terminal not found"));
     }
 
     private String normalizeRequired(String value, String label) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(label + " is required");
-        }
+        if (value == null || value.isBlank()) throw new IllegalArgumentException(label + " is required");
         return value.trim();
     }
 
@@ -102,6 +91,7 @@ public class ProviderTerminalLinkService {
             UUID terminalId,
             String providerCode,
             String providerTerminalId,
+            boolean cardAcceptanceApproved,
             boolean contactlessApproved
     ) {
     }

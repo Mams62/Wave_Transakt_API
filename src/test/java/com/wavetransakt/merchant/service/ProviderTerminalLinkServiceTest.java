@@ -14,13 +14,14 @@ import static org.mockito.Mockito.*;
 class ProviderTerminalLinkServiceTest {
 
     @Test
-    void realProviderAssignmentActivatesTerminalButNfcNeedsExplicitGrant() {
+    void providerLinkCanActivateTerminalWithoutGrantingCardOrNfc() {
         UUID terminalId = UUID.randomUUID();
         PosTerminal terminal = PosTerminal.builder()
                 .id(terminalId)
                 .terminalCode("WTPOS-TEST")
                 .status(PosTerminalStatus.PENDING_PROVIDER_LINK)
                 .supportsQr(true)
+                .supportsCard(false)
                 .supportsNfc(false)
                 .build();
 
@@ -31,45 +32,84 @@ class ProviderTerminalLinkServiceTest {
         ProviderTerminalLinkService service = new ProviderTerminalLinkService(repo);
         PosTerminal linked = service.applyProviderAssignment(
                 new ProviderTerminalLinkService.ProviderTerminalAssignment(
-                        terminalId,
-                        "interswitch",
-                        "REAL-TID-001",
-                        false
+                        terminalId, "interswitch", "REAL-TID-001", false, false
                 )
         );
 
         assertEquals("INTERSWITCH", linked.getProviderCode());
         assertEquals("REAL-TID-001", linked.getProviderTerminalId());
         assertEquals(PosTerminalStatus.ACTIVE, linked.getStatus());
+        assertFalse(linked.isSupportsCard());
         assertFalse(linked.isSupportsNfc());
     }
 
     @Test
-    void explicitContactlessGrantEnablesNfc() {
+    void cardGrantCanBeEnabledWithoutContactless() {
         UUID terminalId = UUID.randomUUID();
         PosTerminal terminal = PosTerminal.builder()
                 .id(terminalId)
                 .terminalCode("WTPOS-TEST")
                 .status(PosTerminalStatus.PENDING_PROVIDER_LINK)
-                .supportsNfc(false)
                 .build();
 
         PosTerminalRepository repo = mock(PosTerminalRepository.class);
         when(repo.findById(terminalId)).thenReturn(Optional.of(terminal));
         when(repo.save(any(PosTerminal.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        ProviderTerminalLinkService service = new ProviderTerminalLinkService(repo);
-        PosTerminal linked = service.applyProviderAssignment(
+        PosTerminal linked = new ProviderTerminalLinkService(repo).applyProviderAssignment(
                 new ProviderTerminalLinkService.ProviderTerminalAssignment(
-                        terminalId,
-                        "INTERSWITCH",
-                        "REAL-TID-002",
-                        true
+                        terminalId, "INTERSWITCH", "REAL-TID-002", true, false
                 )
         );
 
+        assertTrue(linked.isSupportsCard());
+        assertFalse(linked.isSupportsNfc());
+    }
+
+    @Test
+    void contactlessCannotTurnOnWithoutCardApproval() {
+        UUID terminalId = UUID.randomUUID();
+        PosTerminal terminal = PosTerminal.builder()
+                .id(terminalId)
+                .terminalCode("WTPOS-TEST")
+                .status(PosTerminalStatus.PENDING_PROVIDER_LINK)
+                .build();
+
+        PosTerminalRepository repo = mock(PosTerminalRepository.class);
+        when(repo.findById(terminalId)).thenReturn(Optional.of(terminal));
+        when(repo.save(any(PosTerminal.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        PosTerminal linked = new ProviderTerminalLinkService(repo).applyProviderAssignment(
+                new ProviderTerminalLinkService.ProviderTerminalAssignment(
+                        terminalId, "INTERSWITCH", "REAL-TID-003", false, true
+                )
+        );
+
+        assertFalse(linked.isSupportsCard());
+        assertFalse(linked.isSupportsNfc());
+    }
+
+    @Test
+    void explicitCardAndContactlessGrantEnablesBoth() {
+        UUID terminalId = UUID.randomUUID();
+        PosTerminal terminal = PosTerminal.builder()
+                .id(terminalId)
+                .terminalCode("WTPOS-TEST")
+                .status(PosTerminalStatus.PENDING_PROVIDER_LINK)
+                .build();
+
+        PosTerminalRepository repo = mock(PosTerminalRepository.class);
+        when(repo.findById(terminalId)).thenReturn(Optional.of(terminal));
+        when(repo.save(any(PosTerminal.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        PosTerminal linked = new ProviderTerminalLinkService(repo).applyProviderAssignment(
+                new ProviderTerminalLinkService.ProviderTerminalAssignment(
+                        terminalId, "INTERSWITCH", "REAL-TID-004", true, true
+                )
+        );
+
+        assertTrue(linked.isSupportsCard());
         assertTrue(linked.isSupportsNfc());
-        assertEquals(PosTerminalStatus.ACTIVE, linked.getStatus());
     }
 
     @Test
@@ -81,21 +121,18 @@ class ProviderTerminalLinkServiceTest {
                 .providerCode("INTERSWITCH")
                 .providerTerminalId("TID-OLD")
                 .status(PosTerminalStatus.ACTIVE)
+                .supportsCard(true)
                 .build();
 
         PosTerminalRepository repo = mock(PosTerminalRepository.class);
         when(repo.findById(terminalId)).thenReturn(Optional.of(terminal));
 
         ProviderTerminalLinkService service = new ProviderTerminalLinkService(repo);
-
         assertThrows(
                 IllegalStateException.class,
                 () -> service.applyProviderAssignment(
                         new ProviderTerminalLinkService.ProviderTerminalAssignment(
-                                terminalId,
-                                "INTERSWITCH",
-                                "TID-DIFFERENT",
-                                true
+                                terminalId, "INTERSWITCH", "TID-DIFFERENT", true, true
                         )
                 )
         );
@@ -103,27 +140,31 @@ class ProviderTerminalLinkServiceTest {
     }
 
     @Test
-    void retiredTerminalCannotBeRelinkedAndRetirementDisablesNfc() {
+    void retirementDisablesCardAndNfcAndRetiredTerminalCannotBeRelinked() {
         UUID terminalId = UUID.randomUUID();
-        PosTerminal retired = PosTerminal.builder()
+        PosTerminal terminal = PosTerminal.builder()
                 .id(terminalId)
                 .terminalCode("WTPOS-TEST")
-                .status(PosTerminalStatus.RETIRED)
-                .supportsNfc(false)
+                .status(PosTerminalStatus.ACTIVE)
+                .supportsCard(true)
+                .supportsNfc(true)
                 .build();
 
         PosTerminalRepository repo = mock(PosTerminalRepository.class);
-        when(repo.findById(terminalId)).thenReturn(Optional.of(retired));
+        when(repo.findById(terminalId)).thenReturn(Optional.of(terminal));
+        when(repo.save(any(PosTerminal.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ProviderTerminalLinkService service = new ProviderTerminalLinkService(repo);
+        PosTerminal retired = service.retire(terminalId);
+        assertEquals(PosTerminalStatus.RETIRED, retired.getStatus());
+        assertFalse(retired.isSupportsCard());
+        assertFalse(retired.isSupportsNfc());
+
         assertThrows(
                 IllegalStateException.class,
                 () -> service.applyProviderAssignment(
                         new ProviderTerminalLinkService.ProviderTerminalAssignment(
-                                terminalId,
-                                "INTERSWITCH",
-                                "TID-NEW",
-                                true
+                                terminalId, "INTERSWITCH", "TID-NEW", true, true
                         )
                 )
         );

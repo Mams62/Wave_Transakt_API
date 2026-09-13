@@ -1,0 +1,2 @@
+ALTER TABLE pos_terminals
+    ADD COLUMN supports_card BOOLEAN NOT NULL DEFAULT FALSE;
