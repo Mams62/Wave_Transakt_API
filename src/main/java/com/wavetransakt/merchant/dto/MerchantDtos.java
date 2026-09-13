@@ -61,6 +61,7 @@ public final class MerchantDtos {
             String providerCode,
             boolean providerLinked,
             boolean supportsQr,
+            boolean supportsCard,
             boolean supportsNfc,
             LocalDateTime createdAt
     ) {
