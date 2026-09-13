@@ -64,8 +64,15 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers("/api/v1/identity/liveness/webhook")
                         .permitAll()
+                        .requestMatchers(
+                                "/api/v1/business/merchants/**",
+                                "/api/v1/business/pos/**",
+                                "/api/v1/business/qr/**",
+                                "/api/v1/business/acquiring/diagnostics"
+                        )
+                        .hasAnyAuthority("ACCESS_FULL", "ACCESS_SETUP")
                         .anyRequest()
-                        .authenticated()
+                        .hasAuthority("ACCESS_FULL")
                 )
                 .addFilterBefore(
                         jwtAuthenticationFilter,

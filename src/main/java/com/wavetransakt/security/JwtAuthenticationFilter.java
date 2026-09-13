@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,8 +24,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private static final Logger log =
-            LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+    private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
@@ -35,11 +35,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
-
         String authorizationHeader = request.getHeader("Authorization");
 
-        if (authorizationHeader == null ||
-                !authorizationHeader.startsWith("Bearer ")) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -54,7 +52,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
 
             UUID userId = UUID.fromString(jwtService.extractUserId(token));
-
             User user = userRepository.findById(userId).orElse(null);
 
             if (user == null || !user.isEnabled()) {
@@ -63,28 +60,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
 
-            if (SecurityContextHolder
-                    .getContext()
-                    .getAuthentication() == null) {
+            if (SecurityContextHolder.getContext().getAuthentication() == null) {
+                String access = jwtService.extractAccess(token);
+                List<SimpleGrantedAuthority> authorities = new ArrayList<>();
 
-                var authorities = List.of(
-                        new SimpleGrantedAuthority(
-                                "ROLE_" + user.getRole().name()
-                        )
-                );
+                if (JwtService.ACCESS_SETUP_ONLY.equals(access)) {
+                    authorities.add(new SimpleGrantedAuthority("ACCESS_SETUP"));
+                } else {
+                    authorities.add(new SimpleGrantedAuthority("ACCESS_FULL"));
+                    authorities.add(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
+                }
 
                 UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(
-                                user,
-                                null,
-                                authorities
-                        );
+                        new UsernamePasswordAuthenticationToken(user, null, authorities);
 
-                SecurityContextHolder
-                        .getContext()
-                        .setAuthentication(authentication);
+                SecurityContextHolder.getContext().setAuthentication(authentication);
             }
-
         } catch (Exception e) {
             log.debug("JWT authentication rejected");
         }

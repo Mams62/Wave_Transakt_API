@@ -3,6 +3,7 @@ package com.wavetransakt.auth.service;
 import com.wavetransakt.auth.dto.AuthResponse;
 import com.wavetransakt.auth.dto.LoginOtpRequest;
 import com.wavetransakt.identity.provider.DojahGovernmentIdentityClient;
+import com.wavetransakt.security.JwtService;
 import com.wavetransakt.user.dto.LoginRequest;
 import com.wavetransakt.user.dto.RegisterRequest;
 import com.wavetransakt.user.entity.User;
@@ -31,6 +32,7 @@ public class AuthService {
     private final SmsOtpSender smsOtpSender;
     private final FaceLoginChallengeService faceLoginChallengeService;
     private final DojahGovernmentIdentityClient governmentIdentityClient;
+    private final JwtService jwtService;
 
     @Value("${wave.demo.return-verification-code:false}")
     private boolean returnVerificationCode;
@@ -47,8 +49,6 @@ public class AuthService {
         if (userRepository.existsByBvn(bvn)) throw new IllegalArgumentException("BVN already linked to an account");
         if (userRepository.existsByNin(nin)) throw new IllegalArgumentException("NIN already linked to an account");
 
-        // Fail closed: registration is not allowed to continue from format-only checks.
-        // Both identifiers must resolve through the configured government identity provider.
         DojahGovernmentIdentityClient.IdentityRecord bvnRecord = governmentIdentityClient.lookupBvn(bvn);
         DojahGovernmentIdentityClient.IdentityRecord ninRecord = governmentIdentityClient.lookupNin(nin);
 
@@ -89,7 +89,6 @@ public class AuthService {
                 .build();
     }
 
-    /** Starts credential login. No authenticated JWT is issued here. */
     @Transactional
     public AuthResponse login(LoginRequest request) {
         User user = requireUserByIdentifier(request.getIdentifier());
@@ -121,16 +120,6 @@ public class AuthService {
                 .build();
     }
 
-    /**
-     * OTP success is only the second factor. Legacy accounts that already have a
-     * stored NIN but pre-date verified onboarding are upgraded here only after
-     * the government provider confirms that NIN matches the account profile.
-     * No JWT is issued until the subsequent live-face verification succeeds.
-     *
-     * If the external identity provider is not configured or is temporarily
-     * unavailable, the server returns a restricted setup state. This never issues
-     * a JWT and never unlocks wallet, transfer, funding, QR, or payment APIs.
-     */
     @Transactional
     public AuthResponse verifyLoginOtp(LoginOtpRequest request) {
         User user = verificationService.verifyLoginPhoneCode(request.getIdentifier(), request.getOtp());
@@ -146,16 +135,14 @@ public class AuthService {
                 );
             }
 
-            // Do not call an unconfigured provider just to generate an avoidable 503.
-            // The user can enter setup mode, but no authenticated token is created.
             if (!governmentIdentityClient.isConfigured()) {
-                return restrictedIdentitySetupResponse();
+                return restrictedIdentitySetupResponse(user);
             }
 
             try {
                 ensureVerifiedNinForSecureLogin(user);
             } catch (IllegalStateException providerUnavailable) {
-                return restrictedIdentitySetupResponse();
+                return restrictedIdentitySetupResponse(user);
             }
         }
 
@@ -172,10 +159,11 @@ public class AuthService {
                 .build();
     }
 
-    private AuthResponse restrictedIdentitySetupResponse() {
+    private AuthResponse restrictedIdentitySetupResponse(User user) {
+        String setupToken = jwtService.generateSetupToken(user.getId(), user.getEmail());
         return AuthResponse.builder()
-                .message("Phone verified. Identity verification is temporarily unavailable. Setup mode is available, but all financial services remain locked until NIN and live-face verification are completed.")
-                .token(null)
+                .message("Phone verified. Identity verification is temporarily unavailable. Wave Business setup and POS pairing are available, but all financial services remain locked until NIN and live-face verification are completed.")
+                .token(setupToken)
                 .requiresOtp(false)
                 .faceVerificationRequired(false)
                 .restrictedOnboarding(true)
@@ -185,9 +173,7 @@ public class AuthService {
     }
 
     private void ensureVerifiedNinForSecureLogin(User user) {
-        if (Boolean.TRUE.equals(user.getNinVerified())) {
-            return;
-        }
+        if (Boolean.TRUE.equals(user.getNinVerified())) return;
 
         if (user.getNin() == null || user.getNin().isBlank()) {
             throw new IllegalArgumentException(
