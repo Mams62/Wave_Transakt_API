@@ -46,7 +46,6 @@ public class InterswitchWalletProvider implements WalletProvider {
                 ? BigDecimal.ZERO
                 : wallet.getBalance();
         boolean balanceFresh = false;
-        boolean onboardingRequired = true;
         String providerStatus = "CONFIGURATION_REQUIRED";
         String providerMessage =
                 "Interswitch sandbox access is not configured. Financial services remain locked.";
@@ -64,9 +63,9 @@ public class InterswitchWalletProvider implements WalletProvider {
                     visibleBalance = result.balance();
                     balanceFresh = true;
                     providerStatus = "READ_ONLY_CONNECTED";
-                    providerMessage = result.message() == null
-                            ? "Interswitch wallet balance was refreshed successfully."
-                            : result.message();
+                    // Do not echo raw provider messages into the customer API.
+                    providerMessage =
+                            "Interswitch wallet balance was refreshed successfully.";
                 } catch (InterswitchProviderException ignored) {
                     // Fail closed. Do not expose raw provider payloads, credentials,
                     // wallet identifiers, or personally identifying values.
@@ -94,7 +93,7 @@ public class InterswitchWalletProvider implements WalletProvider {
                 .onboardingStatus(providerStatus)
                 .accountStatus(null)
                 .providerMessage(providerMessage)
-                .onboardingRequired(onboardingRequired)
+                .onboardingRequired(true)
                 .balanceFresh(balanceFresh)
                 .build();
     }
