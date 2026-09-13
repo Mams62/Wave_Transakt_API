@@ -4,8 +4,10 @@ import com.wavetransakt.merchant.entity.MerchantSettlementBatch;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface MerchantSettlementBatchRepository extends JpaRepository<MerchantSettlementBatch, UUID> {
     List<MerchantSettlementBatch> findAllByMerchantIdOrderByCreatedAtDesc(UUID merchantId);
+    Optional<MerchantSettlementBatch> findByIdAndMerchantId(UUID id, UUID merchantId);
 }
