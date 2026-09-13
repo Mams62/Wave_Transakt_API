@@ -20,6 +20,7 @@ public final class PosDtos {
             String merchantStatus,
             boolean providerLinked,
             boolean qrEnabled,
+            boolean cardEnabled,
             boolean nfcEnabled,
             boolean paymentAcceptanceEnabled,
             LocalDateTime createdAt
