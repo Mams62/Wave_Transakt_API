@@ -53,6 +53,13 @@ public class InterswitchWalletClient {
         return authClient.isConfigured() && !baseUrl.isBlank();
     }
 
+    /**
+     * Exposes only the configured identifier TYPE, never the identifier value.
+     */
+    public String walletIdType() {
+        return walletIdType;
+    }
+
     public BalanceResult getBalance(String walletId) {
         if (walletId == null || walletId.isBlank()) {
             throw new IllegalArgumentException("Interswitch wallet identifier is required");
