@@ -30,9 +30,11 @@ public class PosClientService {
         PosTerminal terminal = requireOwnedTerminal(ownerUserId, terminalCode);
         Merchant merchant = terminal.getMerchant();
         boolean providerLinked = hasText(terminal.getProviderCode()) && hasText(terminal.getProviderTerminalId());
+        boolean anyAcceptanceCapability = terminal.isSupportsQr() || terminal.isSupportsCard();
         boolean paymentAcceptanceEnabled = terminal.getStatus() == PosTerminalStatus.ACTIVE
                 && merchant.getStatus() == MerchantStatus.ACTIVE
-                && providerLinked;
+                && providerLinked
+                && anyAcceptanceCapability;
 
         return new PosDtos.PosProfileResponse(
                 terminal.getId(),
@@ -44,6 +46,7 @@ public class PosClientService {
                 merchant.getStatus().name(),
                 providerLinked,
                 terminal.isSupportsQr(),
+                terminal.isSupportsCard(),
                 terminal.isSupportsNfc(),
                 paymentAcceptanceEnabled,
                 terminal.getCreatedAt()
