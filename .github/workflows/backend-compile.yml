@@ -8,6 +8,7 @@ on:
       - feat/wave-pos-api-contract-20260913
       - feat/pos-terminal-pairing-session-20260913
       - test/pos-session-safety-20260913
+      - test/provider-terminal-link-state-20260913
   pull_request:
     branches:
       - controlled-start-api-20260910
@@ -36,4 +37,4 @@ jobs:
         run: mvn -B -DskipTests package
 
       - name: Run merchant safety unit tests
-        run: mvn -B -Dtest=MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,PosClientServiceTest,PosTerminalSessionServiceTest test
+        run: mvn -B -Dtest=MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,PosClientServiceTest,PosTerminalSessionServiceTest,ProviderTerminalLinkServiceTest test
