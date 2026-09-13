@@ -48,6 +48,27 @@ services:
       - key: WAVE_SERVICE_PAYMENTS_ENABLED
         value: "false"
 
+      # Interswitch sandbox integration. Keep disabled until credentials are
+      # supplied securely in Render by an authorized business representative.
+      - key: WAVE_INTERSWITCH_ENABLED
+        value: "false"
+      - key: WAVE_INTERSWITCH_CLIENT_ID
+        sync: false
+      - key: WAVE_INTERSWITCH_CLIENT_SECRET
+        sync: false
+      - key: WAVE_INTERSWITCH_PASSPORT_TOKEN_URL
+        value: "https://passport-sandbox.interswitchng.com/passport/oauth/token"
+      - key: WAVE_INTERSWITCH_WALLET_BASE_URL
+        value: "https://api-gateway.interswitchng.com/generic-wallet"
+      - key: WAVE_INTERSWITCH_WALLET_DOMAIN
+        value: "ISW"
+      - key: WAVE_INTERSWITCH_WALLET_CHANNEL
+        value: "SERVICE"
+      - key: WAVE_INTERSWITCH_WALLET_ID_TYPE
+        value: "PHONE"
+
+      # Wema remains available during the controlled migration. Do not remove
+      # it until existing test wallets have been migrated deliberately.
       - key: WAVE_WEMA_WALLET_BASE_URL
         value: "https://playground.azure-api.net"
       - key: WAVE_WEMA_WALLET_SUBSCRIPTION_KEY
