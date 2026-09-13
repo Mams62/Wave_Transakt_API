@@ -68,7 +68,8 @@ public class SecurityConfig {
                                 "/api/v1/business/merchants/**",
                                 "/api/v1/business/pos/**",
                                 "/api/v1/business/qr/**",
-                                "/api/v1/business/acquiring/diagnostics"
+                                "/api/v1/business/acquiring/diagnostics",
+                                "/api/v1/business/acquiring/provisioning-readiness"
                         )
                         .hasAnyAuthority("ACCESS_FULL", "ACCESS_SETUP")
                         .anyRequest()
