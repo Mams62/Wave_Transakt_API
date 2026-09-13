@@ -107,6 +107,7 @@ wave:
     paystack-enabled: ${WAVE_LEGACY_PAYSTACK_ENABLED:false}
 
   wallet:
+    default-provider: ${WAVE_WALLET_DEFAULT_PROVIDER:INTERSWITCH}
     local-money-movement-enabled: ${WAVE_LOCAL_MONEY_MOVEMENT_ENABLED:false}
 
   services:
