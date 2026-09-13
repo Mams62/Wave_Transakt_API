@@ -18,6 +18,11 @@ public final class MerchantDtos {
     ) {
     }
 
+    public record ResolveMerchantQrRequest(
+            @NotBlank @Size(max = 160) String payload
+    ) {
+    }
+
     public record MerchantResponse(
             UUID id,
             String merchantCode,
