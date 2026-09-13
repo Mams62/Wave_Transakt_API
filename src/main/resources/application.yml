@@ -52,6 +52,21 @@ wema:
 
   access-key: ${WAVE_WEMA_ACCESS_KEY:}
 
+# Interswitch is introduced behind the provider-neutral Wave wallet boundary.
+# Sandbox remains disabled until credentials are stored securely in Render.
+# No mobile/POS build should ever contain the client secret.
+interswitch:
+  enabled: ${WAVE_INTERSWITCH_ENABLED:false}
+  client-id: ${WAVE_INTERSWITCH_CLIENT_ID:}
+  client-secret: ${WAVE_INTERSWITCH_CLIENT_SECRET:}
+  passport:
+    token-url: ${WAVE_INTERSWITCH_PASSPORT_TOKEN_URL:https://passport-sandbox.interswitchng.com/passport/oauth/token}
+  wallet:
+    base-url: ${WAVE_INTERSWITCH_WALLET_BASE_URL:https://api-gateway.interswitchng.com/generic-wallet}
+    domain: ${WAVE_INTERSWITCH_WALLET_DOMAIN:ISW}
+    channel: ${WAVE_INTERSWITCH_WALLET_CHANNEL:SERVICE}
+    id-type: ${WAVE_INTERSWITCH_WALLET_ID_TYPE:PHONE}
+
 vtpass:
   base-url: ${WAVE_VTPASS_BASE_URL:https://sandbox.vtpass.com/api/}
   api-key: ${WAVE_VTPASS_API_KEY:}
