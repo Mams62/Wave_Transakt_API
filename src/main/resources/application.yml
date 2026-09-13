@@ -68,12 +68,16 @@ interswitch:
   acquiring:
     # Deliberately blank/disabled until Interswitch assigns the Wave Transakt
     # merchant/acquiring product configuration. Do not guess production hosts,
-    # merchant codes or terminal identifiers.
+    # merchant codes, terminal identifiers or granted product capabilities.
     enabled: ${WAVE_INTERSWITCH_ACQUIRING_ENABLED:false}
     merchant-wallet-base-url: ${WAVE_INTERSWITCH_MERCHANT_WALLET_BASE_URL:}
     merchant-code: ${WAVE_INTERSWITCH_MERCHANT_CODE:}
+    merchant-onboarding-enabled: ${WAVE_INTERSWITCH_MERCHANT_ONBOARDING_ENABLED:false}
+    qr-acceptance-enabled: ${WAVE_INTERSWITCH_QR_ACCEPTANCE_ENABLED:false}
     smart-pos-enabled: ${WAVE_INTERSWITCH_SMART_POS_ENABLED:false}
     contactless-enabled: ${WAVE_INTERSWITCH_CONTACTLESS_ENABLED:false}
+    settlement-enabled: ${WAVE_INTERSWITCH_SETTLEMENT_ENABLED:false}
+    reporting-enabled: ${WAVE_INTERSWITCH_REPORTING_ENABLED:false}
   card:
     # A Card 360 / issuing agreement and approved card programme are required.
     issuing-enabled: ${WAVE_INTERSWITCH_CARD_ISSUING_ENABLED:false}
