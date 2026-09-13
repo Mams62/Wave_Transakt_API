@@ -10,6 +10,7 @@ on:
       - test/pos-session-safety-20260913
       - test/provider-terminal-link-state-20260913
       - feat/provider-event-ingress-20260913
+      - feat/terminal-provisioning-orchestrator-20260913
   pull_request:
     branches:
       - controlled-start-api-20260910
@@ -38,4 +39,4 @@ jobs:
         run: mvn -B -DskipTests package
 
       - name: Run merchant safety unit tests
-        run: mvn -B -Dtest=MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,PosClientServiceTest,PosTerminalSessionServiceTest,ProviderTerminalLinkServiceTest,ProviderEventIngressServiceTest test
+        run: mvn -B -Dtest=MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,PosClientServiceTest,PosTerminalSessionServiceTest,ProviderTerminalLinkServiceTest,ProviderEventIngressServiceTest,TerminalProvisioningServiceTest test
