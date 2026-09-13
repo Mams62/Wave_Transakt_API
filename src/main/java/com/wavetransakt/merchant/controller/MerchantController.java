@@ -48,8 +48,21 @@ public class MerchantController {
     }
 
     /**
-     * Customer-side identity resolution. This endpoint never creates,
-     * authorizes or settles a payment.
+     * Resolve a raw scanner payload such as WTW:MERCHANT:MQ-... .
+     * This endpoint resolves identity only and never creates, authorizes or
+     * settles a payment.
+     */
+    @PostMapping("/qr/resolve")
+    public ResponseEntity<MerchantDtos.MerchantQrResolveResponse> resolveMerchantQrPayload(
+            Authentication authentication,
+            @Valid @RequestBody MerchantDtos.ResolveMerchantQrRequest request
+    ) {
+        authenticatedUser(authentication);
+        return ResponseEntity.ok(merchantService.resolveMerchantQr(request.payload()));
+    }
+
+    /**
+     * Convenience resolver when the client has already extracted the public ID.
      */
     @GetMapping("/qr/{publicId}")
     public ResponseEntity<MerchantDtos.MerchantQrResolveResponse> resolveMerchantQr(
