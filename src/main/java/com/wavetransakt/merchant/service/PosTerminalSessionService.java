@@ -4,6 +4,7 @@ import com.wavetransakt.merchant.dto.PosSessionDtos;
 import com.wavetransakt.merchant.entity.PosPairingCode;
 import com.wavetransakt.merchant.entity.PosTerminal;
 import com.wavetransakt.merchant.entity.PosTerminalSession;
+import com.wavetransakt.merchant.exception.PosSessionAuthenticationException;
 import com.wavetransakt.merchant.repository.PosPairingCodeRepository;
 import com.wavetransakt.merchant.repository.PosTerminalLookupRepository;
 import com.wavetransakt.merchant.repository.PosTerminalSessionRepository;
@@ -102,15 +103,15 @@ public class PosTerminalSessionService {
     @Transactional
     public PosTerminal requireValidSession(String rawToken) {
         if (rawToken == null || rawToken.isBlank()) {
-            throw new IllegalArgumentException("POS session token is required");
+            throw new PosSessionAuthenticationException("POS session token is required");
         }
 
         PosTerminalSession session = sessionRepository.findByTokenHash(sha256(rawToken.trim()))
-                .orElseThrow(() -> new IllegalArgumentException("POS session is invalid or expired"));
+                .orElseThrow(() -> new PosSessionAuthenticationException("POS session is invalid or expired"));
 
         LocalDateTime now = LocalDateTime.now();
         if (session.getRevokedAt() != null || session.getExpiresAt().isBefore(now)) {
-            throw new IllegalArgumentException("POS session is invalid or expired");
+            throw new PosSessionAuthenticationException("POS session is invalid or expired");
         }
 
         session.setLastSeenAt(now);
