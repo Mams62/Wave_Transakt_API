@@ -27,3 +27,6 @@ jobs:
 
       - name: Compile and package without integration runtime
         run: mvn -B -DskipTests package
+
+      - name: Run merchant safety unit tests
+        run: mvn -B -Dtest=MerchantReceiptPolicyTest test
