@@ -6,11 +6,13 @@ on:
       - feat/interswitch-merchant-pos-foundation-20260913
       - feat/interswitch-acquiring-contracts-20260913
       - feat/wave-pos-api-contract-20260913
+      - feat/pos-terminal-pairing-session-20260913
   pull_request:
     branches:
       - controlled-start-api-20260910
       - feat/interswitch-merchant-pos-foundation-20260913
       - feat/interswitch-acquiring-contracts-20260913
+      - feat/wave-pos-api-contract-20260913
   workflow_dispatch:
 
 jobs:
