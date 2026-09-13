@@ -4,7 +4,9 @@ import com.wavetransakt.merchant.dto.MerchantDtos;
 import com.wavetransakt.merchant.entity.*;
 import com.wavetransakt.merchant.repository.MerchantPaymentRepository;
 import com.wavetransakt.merchant.repository.MerchantQrAddressRepository;
+import com.wavetransakt.merchant.repository.MerchantReconciliationItemRepository;
 import com.wavetransakt.merchant.repository.MerchantRepository;
+import com.wavetransakt.merchant.repository.MerchantSettlementBatchRepository;
 import com.wavetransakt.merchant.repository.PosTerminalRepository;
 import com.wavetransakt.user.entity.User;
 import com.wavetransakt.user.repository.UserRepository;
@@ -26,6 +28,8 @@ public class MerchantService {
     private final MerchantQrAddressRepository merchantQrAddressRepository;
     private final PosTerminalRepository posTerminalRepository;
     private final MerchantPaymentRepository merchantPaymentRepository;
+    private final MerchantSettlementBatchRepository merchantSettlementBatchRepository;
+    private final MerchantReconciliationItemRepository merchantReconciliationItemRepository;
     private final UserRepository userRepository;
 
     /**
@@ -152,6 +156,43 @@ public class MerchantService {
                 .toList();
     }
 
+    /**
+     * Read-only provider settlement history. No endpoint in this service can
+     * manufacture, submit, accelerate or mark a settlement complete.
+     */
+    @Transactional(readOnly = true)
+    public List<MerchantDtos.SettlementBatchResponse> getSettlementBatches(
+            UUID ownerUserId,
+            UUID merchantId
+    ) {
+        Merchant merchant = requireOwnedMerchant(ownerUserId, merchantId);
+        return merchantSettlementBatchRepository.findAllByMerchantIdOrderByCreatedAtDesc(merchant.getId())
+                .stream()
+                .map(this::toSettlementBatchResponse)
+                .toList();
+    }
+
+    /**
+     * Read-only reconciliation details for an owned merchant settlement batch.
+     */
+    @Transactional(readOnly = true)
+    public List<MerchantDtos.ReconciliationItemResponse> getReconciliationItems(
+            UUID ownerUserId,
+            UUID merchantId,
+            UUID settlementBatchId
+    ) {
+        Merchant merchant = requireOwnedMerchant(ownerUserId, merchantId);
+        MerchantSettlementBatch batch = merchantSettlementBatchRepository
+                .findByIdAndMerchantId(settlementBatchId, merchant.getId())
+                .orElseThrow(() -> new IllegalArgumentException("Settlement batch not found"));
+
+        return merchantReconciliationItemRepository
+                .findAllBySettlementBatchIdOrderByCreatedAtAsc(batch.getId())
+                .stream()
+                .map(this::toReconciliationItemResponse)
+                .toList();
+    }
+
     private User requireUser(UUID userId) {
         if (userId == null) {
             throw new IllegalArgumentException("User is required");
@@ -208,6 +249,36 @@ public class MerchantService {
                 payment.getSettlementStatus().name(),
                 payment.getProviderCode(),
                 payment.getCreatedAt()
+        );
+    }
+
+    private MerchantDtos.SettlementBatchResponse toSettlementBatchResponse(MerchantSettlementBatch batch) {
+        return new MerchantDtos.SettlementBatchResponse(
+                batch.getId(),
+                batch.getProviderCode(),
+                batch.getCurrency(),
+                batch.getGrossAmount(),
+                batch.getFeeAmount(),
+                batch.getNetAmount(),
+                batch.getPaymentCount(),
+                batch.getStatus(),
+                batch.getSettlementDate(),
+                batch.getCreatedAt()
+        );
+    }
+
+    private MerchantDtos.ReconciliationItemResponse toReconciliationItemResponse(MerchantReconciliationItem item) {
+        MerchantPayment payment = item.getMerchantPayment();
+        return new MerchantDtos.ReconciliationItemResponse(
+                item.getId(),
+                payment.getId(),
+                payment.getPaymentReference(),
+                item.getExpectedAmount(),
+                item.getProviderAmount(),
+                item.getDifferenceAmount(),
+                item.getStatus(),
+                item.getReason(),
+                item.getCreatedAt()
         );
     }
 
