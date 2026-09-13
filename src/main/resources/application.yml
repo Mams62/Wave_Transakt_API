@@ -78,6 +78,10 @@ interswitch:
     contactless-enabled: ${WAVE_INTERSWITCH_CONTACTLESS_ENABLED:false}
     settlement-enabled: ${WAVE_INTERSWITCH_SETTLEMENT_ENABLED:false}
     reporting-enabled: ${WAVE_INTERSWITCH_REPORTING_ENABLED:false}
+    terminal-link-enabled: ${WAVE_INTERSWITCH_TERMINAL_LINK_ENABLED:false}
+    transaction-inquiry-enabled: ${WAVE_INTERSWITCH_TRANSACTION_INQUIRY_ENABLED:false}
+    settlement-inquiry-enabled: ${WAVE_INTERSWITCH_SETTLEMENT_INQUIRY_ENABLED:false}
+    webhook-verification-configured: ${WAVE_INTERSWITCH_WEBHOOK_VERIFICATION_CONFIGURED:false}
   card:
     # A Card 360 / issuing agreement and approved card programme are required.
     issuing-enabled: ${WAVE_INTERSWITCH_CARD_ISSUING_ENABLED:false}
