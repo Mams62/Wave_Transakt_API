@@ -3,7 +3,7 @@ spring:
     name: WaveTransaktAPI
 
   datasource:
-    url: "${WAVE_DB_URL:jdbc:postgresql://${WAVE_DB_HOST:localhost}:${WAVE_DB_PORT:5432}/${WAVE_DB_NAME:WaveTransaktAPI}}"
+    url: "${WAVE_DB_URL:jdbc:postgresql://${WAVE_DB_HOST:localhost}:${WAVE_DB_DB_PORT:5432}/${WAVE_DB_NAME:WaveTransaktAPI}}"
     username: ${WAVE_DB_USERNAME:postgres}
     password: ${WAVE_DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
@@ -52,9 +52,8 @@ wema:
 
   access-key: ${WAVE_WEMA_ACCESS_KEY:}
 
-# Interswitch is introduced behind the provider-neutral Wave wallet boundary.
-# Sandbox remains disabled until credentials are stored securely in Render.
-# No mobile/POS build should ever contain the client secret.
+# Interswitch credentials remain server-side only. Consumer wallet, merchant
+# acquiring/POS and card issuing are treated as separate provider products.
 interswitch:
   enabled: ${WAVE_INTERSWITCH_ENABLED:false}
   client-id: ${WAVE_INTERSWITCH_CLIENT_ID:}
@@ -66,6 +65,18 @@ interswitch:
     domain: ${WAVE_INTERSWITCH_WALLET_DOMAIN:ISW}
     channel: ${WAVE_INTERSWITCH_WALLET_CHANNEL:SERVICE}
     id-type: ${WAVE_INTERSWITCH_WALLET_ID_TYPE:PHONE}
+  acquiring:
+    # Deliberately blank/disabled until Interswitch assigns the Wave Transakt
+    # merchant/acquiring product configuration. Do not guess production hosts,
+    # merchant codes or terminal identifiers.
+    enabled: ${WAVE_INTERSWITCH_ACQUIRING_ENABLED:false}
+    merchant-wallet-base-url: ${WAVE_INTERSWITCH_MERCHANT_WALLET_BASE_URL:}
+    merchant-code: ${WAVE_INTERSWITCH_MERCHANT_CODE:}
+    smart-pos-enabled: ${WAVE_INTERSWITCH_SMART_POS_ENABLED:false}
+    contactless-enabled: ${WAVE_INTERSWITCH_CONTACTLESS_ENABLED:false}
+  card:
+    # A Card 360 / issuing agreement and approved card programme are required.
+    issuing-enabled: ${WAVE_INTERSWITCH_CARD_ISSUING_ENABLED:false}
 
 vtpass:
   base-url: ${WAVE_VTPASS_BASE_URL:https://sandbox.vtpass.com/api/}
