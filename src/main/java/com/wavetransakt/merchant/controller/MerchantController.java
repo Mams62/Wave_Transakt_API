@@ -61,9 +61,6 @@ public class MerchantController {
         return ResponseEntity.ok(merchantService.resolveMerchantQr(request.payload()));
     }
 
-    /**
-     * Convenience resolver when the client has already extracted the public ID.
-     */
     @GetMapping("/qr/{publicId}")
     public ResponseEntity<MerchantDtos.MerchantQrResolveResponse> resolveMerchantQr(
             Authentication authentication,
@@ -99,6 +96,31 @@ public class MerchantController {
     ) {
         User user = authenticatedUser(authentication);
         return ResponseEntity.ok(merchantService.getPayments(user.getId(), merchantId));
+    }
+
+    @GetMapping("/merchants/{merchantId}/settlements")
+    public ResponseEntity<List<MerchantDtos.SettlementBatchResponse>> getSettlements(
+            Authentication authentication,
+            @PathVariable UUID merchantId
+    ) {
+        User user = authenticatedUser(authentication);
+        return ResponseEntity.ok(merchantService.getSettlementBatches(user.getId(), merchantId));
+    }
+
+    @GetMapping("/merchants/{merchantId}/settlements/{settlementBatchId}/reconciliation")
+    public ResponseEntity<List<MerchantDtos.ReconciliationItemResponse>> getReconciliation(
+            Authentication authentication,
+            @PathVariable UUID merchantId,
+            @PathVariable UUID settlementBatchId
+    ) {
+        User user = authenticatedUser(authentication);
+        return ResponseEntity.ok(
+                merchantService.getReconciliationItems(
+                        user.getId(),
+                        merchantId,
+                        settlementBatchId
+                )
+        );
     }
 
     private User authenticatedUser(Authentication authentication) {
