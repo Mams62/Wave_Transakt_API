@@ -41,6 +41,10 @@ public class PosTerminal {
     @Builder.Default
     private boolean supportsQr = true;
 
+    @Column(name = "supports_card", nullable = false)
+    @Builder.Default
+    private boolean supportsCard = false;
+
     @Column(name = "supports_nfc", nullable = false)
     @Builder.Default
     private boolean supportsNfc = false;
