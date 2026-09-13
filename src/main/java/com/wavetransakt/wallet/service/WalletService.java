@@ -6,10 +6,12 @@ import com.wavetransakt.wallet.entity.Wallet;
 import com.wavetransakt.wallet.entity.WalletStatus;
 import com.wavetransakt.wallet.repository.WalletRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Locale;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Service
@@ -20,8 +22,17 @@ public class WalletService {
     private final LedgerService ledgerService;
 
     /**
-     * Create the stable internal Wave wallet record. The external Wema NUBAN is
-     * created separately after the user completes Wema's NIN + OTP flow.
+     * Provider used for newly created Wave wallet records. The Wave wallet
+     * number remains our stable customer-facing identifier while the provider
+     * supplies regulated wallet infrastructure behind the provider boundary.
+     */
+    @Value("${wave.wallet.default-provider:INTERSWITCH}")
+    private String defaultProvider = "INTERSWITCH";
+
+    /**
+     * Creates the stable internal Wave wallet record. Provider onboarding is a
+     * separate step and must not be treated as complete merely because the
+     * local wallet row exists.
      */
     @Transactional
     public Wallet createWallet(User user) {
@@ -35,6 +46,7 @@ public class WalletService {
                 .balance(BigDecimal.ZERO)
                 .currency("NGN")
                 .status(WalletStatus.ACTIVE)
+                .provider(resolveDefaultProvider())
                 .build();
 
         Wallet savedWallet = walletRepository.save(wallet);
@@ -58,5 +70,12 @@ public class WalletService {
             );
         } while (walletRepository.existsByWalletNumber(walletNumber));
         return walletNumber;
+    }
+
+    private String resolveDefaultProvider() {
+        if (defaultProvider == null || defaultProvider.isBlank()) {
+            return "INTERSWITCH";
+        }
+        return defaultProvider.trim().toUpperCase(Locale.ROOT);
     }
 }
