@@ -1,5 +1,6 @@
 package com.wavetransakt.config;
 
+import com.wavetransakt.merchant.exception.PosSessionAuthenticationException;
 import com.wavetransakt.transaction.exception.IdempotencyConflictException;
 import com.wavetransakt.wallet.wema.WemaProviderException;
 import org.springframework.http.HttpStatus;
@@ -47,6 +48,19 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
+                .body(response);
+    }
+
+    @ExceptionHandler(PosSessionAuthenticationException.class)
+    public ResponseEntity<?> handlePosSessionAuthentication(
+            PosSessionAuthenticationException ex
+    ) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("message", ex.getMessage());
+        response.put("error", "POS_SESSION_INVALID");
+
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
                 .body(response);
     }
 
