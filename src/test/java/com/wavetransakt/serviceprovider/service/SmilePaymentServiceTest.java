@@ -29,6 +29,7 @@ class SmilePaymentServiceTest {
         VtpassSmileClient smileClient = mock(VtpassSmileClient.class);
         VtpassPurchaseClient purchaseClient = mock(VtpassPurchaseClient.class);
         ServicePaymentReservationService reservationService = mock(ServicePaymentReservationService.class);
+        ServicePaymentResponseMapper responseMapper = mock(ServicePaymentResponseMapper.class);
 
         when(catalog.getProviders("data")).thenReturn(List.of(
                 new Provider(
@@ -60,7 +61,8 @@ class SmilePaymentServiceTest {
                 catalog,
                 smileClient,
                 purchaseClient,
-                reservationService
+                reservationService,
+                responseMapper
         );
 
         PurchaseRequest request = new PurchaseRequest(
