@@ -19,6 +19,7 @@ on:
       - feat/live-jamb-pin-20260914
       - feat/interswitch-bank-transfers-20260914
       - feat/external-bank-transfer-ledger-20260914
+      - feat/external-bank-transfer-orchestration-20260914
   pull_request:
     branches:
       - controlled-start-api-20260910
@@ -47,4 +48,4 @@ jobs:
         run: mvn -B -DskipTests package
 
       - name: Run financial, merchant, card and transfer safety unit tests
-        run: mvn -B -Dtest=ServicePaymentServiceTest,VtpassVerificationClientTest,VtpassSmileClientTest,SmilePaymentServiceTest,ServiceFulfillmentCryptoTest,WaecPaymentServiceTest,VtpassWaecPurchaseClientTest,JambPaymentServiceTest,VtpassJambPurchaseClientTest,InterswitchBankTransferGatewayTest,MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,InterswitchCardIssuingGatewayTest,WaveCardServiceTest,PosClientServiceTest,PosTerminalSessionServiceTest,ProviderTerminalLinkServiceTest,ProviderEventIngressServiceTest,TerminalProvisioningServiceTest test
+        run: mvn -B -Dtest=ServicePaymentServiceTest,VtpassVerificationClientTest,VtpassSmileClientTest,SmilePaymentServiceTest,ServiceFulfillmentCryptoTest,WaecPaymentServiceTest,VtpassWaecPurchaseClientTest,JambPaymentServiceTest,VtpassJambPurchaseClientTest,InterswitchBankTransferGatewayTest,ExternalBankTransferOrchestratorTest,MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,InterswitchCardIssuingGatewayTest,WaveCardServiceTest,PosClientServiceTest,PosTerminalSessionServiceTest,ProviderTerminalLinkServiceTest,ProviderEventIngressServiceTest,TerminalProvisioningServiceTest test

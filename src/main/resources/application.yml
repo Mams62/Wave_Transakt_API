@@ -143,6 +143,12 @@ wave:
     default-provider: ${WAVE_WALLET_DEFAULT_PROVIDER:INTERSWITCH}
     local-money-movement-enabled: ${WAVE_LOCAL_MONEY_MOVEMENT_ENABLED:false}
 
+  transfers:
+    external:
+      # Separate Wave-level kill switch. Keep false until Interswitch confirms
+      # Wave's Send Money product approval and funding/settlement arrangement.
+      execution-enabled: ${WAVE_EXTERNAL_BANK_TRANSFER_EXECUTION_ENABLED:false}
+
   services:
     provider-payments-enabled: ${WAVE_SERVICE_PAYMENTS_ENABLED:false}
 
