@@ -40,4 +40,4 @@ jobs:
         run: mvn -B -DskipTests package
 
       - name: Run merchant and card safety unit tests
-        run: mvn -B -Dtest=MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,InterswitchCardIssuingGatewayTest,PosClientServiceTest,PosTerminalSessionServiceTest,ProviderTerminalLinkServiceTest,ProviderEventIngressServiceTest,TerminalProvisioningServiceTest test
+        run: mvn -B -Dtest=MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,InterswitchCardIssuingGatewayTest,WaveCardServiceTest,PosClientServiceTest,PosTerminalSessionServiceTest,ProviderTerminalLinkServiceTest,ProviderEventIngressServiceTest,TerminalProvisioningServiceTest test
