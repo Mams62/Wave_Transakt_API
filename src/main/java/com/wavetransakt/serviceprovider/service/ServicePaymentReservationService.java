@@ -121,6 +121,8 @@ public class ServicePaymentReservationService {
                 .serviceName(request.serviceName())
                 .variationCode(request.variationCode())
                 .recipient(request.recipient())
+                .customerPhone(request.customerPhone())
+                .serviceOption(request.serviceOption())
                 .amount(request.amount())
                 .currency("NGN")
                 .providerRequestId(generateProviderRequestId())
@@ -227,6 +229,8 @@ public class ServicePaymentReservationService {
                 request.serviceId(),
                 request.variationCode() == null ? "" : request.variationCode(),
                 request.recipient(),
+                request.customerPhone() == null ? "" : request.customerPhone(),
+                request.serviceOption() == null ? "" : request.serviceOption(),
                 request.amount().toPlainString()
         );
         try {
@@ -267,6 +271,8 @@ public class ServicePaymentReservationService {
             String serviceName,
             String variationCode,
             String recipient,
+            String customerPhone,
+            String serviceOption,
             BigDecimal amount,
             String transactionPin
     ) {
