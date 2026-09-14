@@ -18,9 +18,9 @@ public class InterswitchCardIssuingGateway implements CardIssuingGateway {
     private final boolean contactlessProgramApproved;
 
     public InterswitchCardIssuingGateway(
-            @Value("${wave.interswitch.card-issuing-enabled:false}") boolean cardIssuingEnabled,
-            @Value("${wave.interswitch.card-issuing-product-approved:false}") boolean providerProductApproved,
-            @Value("${wave.interswitch.card-contactless-program-approved:false}") boolean contactlessProgramApproved
+            @Value("${interswitch.card.issuing-enabled:false}") boolean cardIssuingEnabled,
+            @Value("${interswitch.card.product-approved:false}") boolean providerProductApproved,
+            @Value("${interswitch.card.contactless-program-approved:false}") boolean contactlessProgramApproved
     ) {
         this.cardIssuingEnabled = cardIssuingEnabled;
         this.providerProductApproved = providerProductApproved;
