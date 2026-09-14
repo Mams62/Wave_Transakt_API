@@ -8,8 +8,8 @@ import java.math.BigDecimal;
 public record ServicePurchaseRequest(
         @NotBlank(message = "Service kind is required")
         @Pattern(
-                regexp = "(?i)AIRTIME|DATA|ELECTRICITY|TV",
-                message = "Service kind must be AIRTIME, DATA, ELECTRICITY or TV"
+                regexp = "(?i)AIRTIME|DATA|ELECTRICITY|TV|INTERNET",
+                message = "Service kind must be AIRTIME, DATA, ELECTRICITY, TV or INTERNET"
         )
         String serviceKind,
 
