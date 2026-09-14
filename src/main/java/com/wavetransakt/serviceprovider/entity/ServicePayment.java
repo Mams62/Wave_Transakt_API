@@ -21,7 +21,8 @@ import java.util.UUID;
                 @Index(name = "idx_service_payment_reference", columnList = "reference"),
                 @Index(name = "idx_service_payment_wallet", columnList = "wallet_id"),
                 @Index(name = "idx_service_payment_provider_request", columnList = "provider_request_id"),
-                @Index(name = "idx_service_payment_created", columnList = "created_at")
+                @Index(name = "idx_service_payment_created", columnList = "created_at"),
+                @Index(name = "idx_service_payment_service_kind", columnList = "service_kind")
         }
 )
 @Getter
@@ -66,6 +67,12 @@ public class ServicePayment {
 
     @Column(nullable = false, length = 40)
     private String recipient;
+
+    @Column(name = "customer_phone", length = 20)
+    private String customerPhone;
+
+    @Column(name = "service_option", length = 20)
+    private String serviceOption;
 
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;
