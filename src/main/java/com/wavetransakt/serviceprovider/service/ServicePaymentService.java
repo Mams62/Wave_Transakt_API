@@ -30,6 +30,7 @@ public class ServicePaymentService {
     private final VtpassPurchaseClient purchaseClient;
     private final VtpassVerificationClient verificationClient;
     private final ServicePaymentReservationService reservationService;
+    private final ServicePaymentResponseMapper responseMapper;
 
     public ServicePaymentResponse purchase(UUID userId, String idempotencyKey, ServicePurchaseRequest request) {
         if (request == null) throw new IllegalArgumentException("Service purchase request is required");
@@ -39,7 +40,7 @@ public class ServicePaymentService {
         Reservation reservation = reservationService.reserve(userId, idempotencyKey, canonical);
         ServicePayment payment = reservation.payment();
 
-        if (!reservation.created()) return toResponse(payment);
+        if (!reservation.created()) return responseMapper.toResponse(payment);
 
         ProviderResult providerResult = purchaseClient.purchase(
                 payment.getServiceKind(),
@@ -52,20 +53,28 @@ public class ServicePaymentService {
                 payment.getProviderRequestId()
         );
 
-        return toResponse(reservationService.applyProviderResult(userId, payment.getId(), providerResult));
+        return responseMapper.toResponse(
+                reservationService.applyProviderResult(userId, payment.getId(), providerResult)
+        );
     }
 
     public ServicePaymentResponse getPayment(UUID userId, String reference) {
-        return toResponse(reservationService.findOwned(userId, normalizeReference(reference)));
+        return responseMapper.toResponse(
+                reservationService.findOwned(userId, normalizeReference(reference))
+        );
     }
 
     public ServicePaymentResponse requery(UUID userId, String reference) {
         ServicePayment payment = reservationService.findOwned(userId, normalizeReference(reference));
-        if (payment.getStatus() != ServicePaymentStatus.PENDING) return toResponse(payment);
+        if (payment.getStatus() != ServicePaymentStatus.PENDING) {
+            return responseMapper.toResponse(payment);
+        }
 
         purchaseClient.validateConfigured();
         ProviderResult result = purchaseClient.requery(payment.getProviderRequestId());
-        return toResponse(reservationService.applyProviderResult(userId, payment.getId(), result));
+        return responseMapper.toResponse(
+                reservationService.applyProviderResult(userId, payment.getId(), result)
+        );
     }
 
     private CanonicalServiceRequest resolveCanonicalRequest(ServicePurchaseRequest request) {
@@ -213,13 +222,5 @@ public class ServicePaymentService {
     private String normalizeReference(String reference) {
         if (reference == null || reference.isBlank() || reference.trim().length() > 60) throw new IllegalArgumentException("Invalid service payment reference");
         return reference.trim();
-    }
-
-    private ServicePaymentResponse toResponse(ServicePayment payment) {
-        return new ServicePaymentResponse(
-                payment.getId(), payment.getReference(), payment.getProviderRequestId(), payment.getServiceKind(), payment.getServiceId(), payment.getServiceName(),
-                payment.getVariationCode(), payment.getRecipient(), payment.getAmount(), payment.getCurrency(), payment.getStatus().name(), payment.getProviderStatus(),
-                payment.getProviderTransactionId(), payment.getProviderMessage(), payment.getCreatedAt()
-        );
     }
 }

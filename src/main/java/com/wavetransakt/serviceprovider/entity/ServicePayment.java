@@ -98,6 +98,9 @@ public class ServicePayment {
     @Column(name = "provider_message", length = 255)
     private String providerMessage;
 
+    @Column(name = "provider_fulfillment_ciphertext", columnDefinition = "TEXT")
+    private String providerFulfillmentCiphertext;
+
     @Column(name = "created_at", nullable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

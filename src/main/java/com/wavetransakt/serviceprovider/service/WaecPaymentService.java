@@ -3,15 +3,13 @@ package com.wavetransakt.serviceprovider.service;
 import com.wavetransakt.serviceprovider.dto.ServiceCatalogDtos.Provider;
 import com.wavetransakt.serviceprovider.dto.ServiceCatalogDtos.Variation;
 import com.wavetransakt.serviceprovider.dto.ServicePaymentResponse;
-import com.wavetransakt.serviceprovider.dto.SmileServiceDtos.PurchaseRequest;
-import com.wavetransakt.serviceprovider.dto.SmileServiceDtos.VerifyEmailResponse;
+import com.wavetransakt.serviceprovider.dto.WaecServiceDtos.ResultCheckerPurchaseRequest;
 import com.wavetransakt.serviceprovider.entity.ServicePayment;
 import com.wavetransakt.serviceprovider.service.ServicePaymentReservationService.CanonicalServiceRequest;
 import com.wavetransakt.serviceprovider.service.ServicePaymentReservationService.Reservation;
 import com.wavetransakt.serviceprovider.vtpass.VtpassCatalogClient;
 import com.wavetransakt.serviceprovider.vtpass.VtpassPurchaseClient;
 import com.wavetransakt.serviceprovider.vtpass.VtpassPurchaseClient.ProviderResult;
-import com.wavetransakt.serviceprovider.vtpass.VtpassSmileClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -21,50 +19,33 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class SmilePaymentService {
+public class WaecPaymentService {
 
-    private static final String SERVICE_ID = "smile-direct";
+    private static final String SERVICE_ID = "waec";
 
     private final VtpassCatalogClient catalogClient;
-    private final VtpassSmileClient smileClient;
     private final VtpassPurchaseClient purchaseClient;
     private final ServicePaymentReservationService reservationService;
     private final ServicePaymentResponseMapper responseMapper;
 
-    public ServicePaymentResponse purchase(
+    public ServicePaymentResponse purchaseResultChecker(
             UUID userId,
             String idempotencyKey,
-            PurchaseRequest request
+            ResultCheckerPurchaseRequest request
     ) {
         if (request == null) {
-            throw new IllegalArgumentException("Smile purchase request is required");
+            throw new IllegalArgumentException("WAEC result checker purchase request is required");
         }
 
         purchaseClient.validateConfigured();
 
-        Provider provider = catalogClient.getProviders("data")
+        Provider provider = catalogClient.getProviders("education")
                 .stream()
                 .filter(item -> SERVICE_ID.equalsIgnoreCase(item.serviceId()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Smile is not available in the connected provider catalog"
+                        "WAEC Result Checker is not available in the connected provider catalog"
                 ));
-
-        VerifyEmailResponse verification = smileClient.verifyEmail(request.email());
-        if (!verification.valid()) {
-            throw new IllegalArgumentException(
-                    verification.message() == null || verification.message().isBlank()
-                            ? "Smile email could not be verified"
-                            : verification.message()
-            );
-        }
-
-        String accountId = smileClient.normalizeAccountId(request.accountId());
-        if (!smileClient.containsAccount(verification, accountId)) {
-            throw new IllegalArgumentException(
-                    "Selected Smile account is not linked to the verified email"
-            );
-        }
 
         String variationCode = request.variationCode().trim();
         Variation variation = catalogClient.getVariations(SERVICE_ID)
@@ -73,21 +54,21 @@ public class SmilePaymentService {
                 .filter(item -> variationCode.equalsIgnoreCase(item.code()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Selected Smile plan is no longer available"
+                        "Selected WAEC Result Checker option is no longer available"
                 ));
 
         BigDecimal amount = resolveVariationAmount(request.amount(), variation);
         validateProviderLimits(provider, amount);
-        String customerPhone = normalizePhone(request.customerPhone());
+        String phone = normalizePhone(request.customerPhone());
 
         CanonicalServiceRequest canonical = new CanonicalServiceRequest(
-                "INTERNET",
+                "EDUCATION",
                 SERVICE_ID,
                 provider.name(),
                 variationCode,
-                accountId,
-                customerPhone,
-                "verified-smile-account",
+                phone,
+                phone,
+                "quantity:1",
                 amount,
                 request.transactionPin()
         );
@@ -135,7 +116,7 @@ public class SmilePaymentService {
         if (requestedAmount != null && variation.fixedPrice() &&
                 normalizeAmount(requestedAmount).compareTo(currentAmount) != 0) {
             throw new IllegalArgumentException(
-                    "The selected Smile plan price has changed; refresh plans and try again"
+                    "The selected WAEC price has changed; refresh options and try again"
             );
         }
         return currentAmount;

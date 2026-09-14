@@ -74,6 +74,14 @@ public class VtpassPurchaseClient {
                     throw new IllegalArgumentException("Unsupported internet provider transport");
                 }
             }
+            case "EDUCATION" -> {
+                if (!"waec".equalsIgnoreCase(serviceId)) {
+                    throw new IllegalArgumentException("Unsupported education provider transport");
+                }
+                form.add("variation_code", requireValue(variationCode, "WAEC variation code"));
+                form.add("quantity", "1");
+                form.add("phone", requireValue(customerPhone, "Customer phone"));
+            }
             default -> throw new IllegalArgumentException("Unsupported provider service kind");
         }
         return post("pay", form);
@@ -116,7 +124,12 @@ public class VtpassPurchaseClient {
         String normalizedStatus = transactionStatus.toLowerCase(Locale.ROOT);
         String normalizedDescription = description.toUpperCase(Locale.ROOT);
         if (normalizedStatus.equals("delivered") || normalizedStatus.equals("successful") || normalizedStatus.equals("success")) {
-            return ProviderResult.success(transactionStatus, transactionId, description.isBlank() ? "Service delivered" : description);
+            return ProviderResult.success(
+                    transactionStatus,
+                    transactionId,
+                    description.isBlank() ? "Service delivered" : description,
+                    fulfillment(body)
+            );
         }
         if (normalizedStatus.equals("failed") || normalizedStatus.equals("reversed") || normalizedStatus.equals("cancelled")) {
             return ProviderResult.failed(transactionStatus, transactionId, description.isBlank() ? "Provider reported failure" : description);
@@ -132,6 +145,24 @@ public class VtpassPurchaseClient {
         }
         return ProviderResult.pending(transactionStatus.isBlank() ? code : transactionStatus, transactionId,
                 description.isBlank() ? "Provider outcome is uncertain; status must be requeried" : description);
+    }
+
+    private String fulfillment(JsonNode body) {
+        String purchasedCode = text(body, "purchased_code");
+        if (!purchasedCode.isBlank()) {
+            return purchasedCode;
+        }
+
+        JsonNode cards = body.path("cards");
+        if (cards.isArray() && !cards.isEmpty()) {
+            JsonNode card = cards.get(0);
+            String serial = firstText(card, "Serial", "serial");
+            String pin = firstText(card, "Pin", "PIN", "pin");
+            if (!serial.isBlank() || !pin.isBlank()) {
+                return ("Serial: " + serial + ", PIN: " + pin).trim();
+            }
+        }
+        return null;
     }
 
     private String requireValue(String value, String label) {
@@ -164,17 +195,37 @@ public class VtpassPurchaseClient {
         return value.isMissingNode() || value.isNull() ? "" : value.asText("").trim();
     }
 
+    private String firstText(JsonNode node, String... fields) {
+        for (String field : fields) {
+            String value = text(node, field);
+            if (!value.isBlank()) return value;
+        }
+        return "";
+    }
+
     public enum ProviderOutcome { SUCCESS, PENDING, FAILED }
 
-    public record ProviderResult(ProviderOutcome outcome, String providerStatus, String transactionId, String message) {
+    public record ProviderResult(
+            ProviderOutcome outcome,
+            String providerStatus,
+            String transactionId,
+            String message,
+            String fulfillment
+    ) {
         public static ProviderResult success(String status, String transactionId, String message) {
-            return new ProviderResult(ProviderOutcome.SUCCESS, status, transactionId, message);
+            return new ProviderResult(ProviderOutcome.SUCCESS, status, transactionId, message, null);
         }
+
+        public static ProviderResult success(String status, String transactionId, String message, String fulfillment) {
+            return new ProviderResult(ProviderOutcome.SUCCESS, status, transactionId, message, fulfillment);
+        }
+
         public static ProviderResult pending(String status, String transactionId, String message) {
-            return new ProviderResult(ProviderOutcome.PENDING, status, transactionId, message);
+            return new ProviderResult(ProviderOutcome.PENDING, status, transactionId, message, null);
         }
+
         public static ProviderResult failed(String status, String transactionId, String message) {
-            return new ProviderResult(ProviderOutcome.FAILED, status, transactionId, message);
+            return new ProviderResult(ProviderOutcome.FAILED, status, transactionId, message, null);
         }
     }
 }

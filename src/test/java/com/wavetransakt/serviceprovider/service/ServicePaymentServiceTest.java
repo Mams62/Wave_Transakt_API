@@ -3,7 +3,6 @@ package com.wavetransakt.serviceprovider.service;
 import com.wavetransakt.serviceprovider.dto.ServiceCatalogDtos.Provider;
 import com.wavetransakt.serviceprovider.dto.ServicePurchaseRequest;
 import com.wavetransakt.serviceprovider.dto.ServiceVerificationDtos.VerifyResponse;
-import com.wavetransakt.serviceprovider.service.ServicePaymentReservationService.Reservation;
 import com.wavetransakt.serviceprovider.vtpass.VtpassCatalogClient;
 import com.wavetransakt.serviceprovider.vtpass.VtpassPurchaseClient;
 import com.wavetransakt.serviceprovider.vtpass.VtpassVerificationClient;
@@ -25,6 +24,7 @@ class ServicePaymentServiceTest {
         VtpassPurchaseClient purchase = mock(VtpassPurchaseClient.class);
         VtpassVerificationClient verification = mock(VtpassVerificationClient.class);
         ServicePaymentReservationService reservation = mock(ServicePaymentReservationService.class);
+        ServicePaymentResponseMapper responseMapper = mock(ServicePaymentResponseMapper.class);
 
         when(catalog.getProviders("electricity-bill")).thenReturn(List.of(
                 new Provider(
@@ -61,7 +61,8 @@ class ServicePaymentServiceTest {
                 catalog,
                 purchase,
                 verification,
-                reservation
+                reservation,
+                responseMapper
         );
 
         ServicePurchaseRequest request = new ServicePurchaseRequest(

@@ -19,6 +19,7 @@ public record ServicePaymentResponse(
         String providerStatus,
         String providerTransactionId,
         String message,
+        String fulfillment,
         LocalDateTime createdAt
 ) {
 }

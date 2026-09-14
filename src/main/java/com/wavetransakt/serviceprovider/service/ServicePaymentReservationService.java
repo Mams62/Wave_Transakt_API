@@ -46,6 +46,7 @@ public class ServicePaymentReservationService {
     private final ServicePaymentRepository servicePaymentRepository;
     private final PasswordEncoder passwordEncoder;
     private final ServicePaymentLedgerService servicePaymentLedgerService;
+    private final ServiceFulfillmentCrypto fulfillmentCrypto;
 
     @Transactional
     public Reservation reserve(
@@ -164,6 +165,12 @@ public class ServicePaymentReservationService {
         payment.setProviderMessage(trim(result.message(), 255));
 
         if (result.outcome() == ProviderOutcome.SUCCESS) {
+            String fulfillment = trim(result.fulfillment(), 1000);
+            if (fulfillment != null) {
+                payment.setProviderFulfillmentCiphertext(
+                        fulfillmentCrypto.encrypt(fulfillment)
+                );
+            }
             payment.setStatus(ServicePaymentStatus.SUCCESSFUL);
         } else if (result.outcome() == ProviderOutcome.FAILED) {
             Wallet wallet = walletRepository.findByIdForUpdate(payment.getWallet().getId())
