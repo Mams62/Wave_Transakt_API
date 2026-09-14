@@ -18,11 +18,7 @@ class VtpassVerificationClientTest {
     void parsesVerifiedElectricityCustomerAndUsesPostCredentials() {
         RestTemplate restTemplate = new RestTemplate();
         MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
-        VtpassVerificationClient client = new VtpassVerificationClient(restTemplate);
-
-        ReflectionTestUtils.setField(client, "baseUrl", "https://sandbox.vtpass.com/api/");
-        ReflectionTestUtils.setField(client, "apiKey", "api-key-value");
-        ReflectionTestUtils.setField(client, "secretKey", "secret-key-value");
+        VtpassVerificationClient client = configuredClient(restTemplate);
 
         server.expect(requestTo("https://sandbox.vtpass.com/api/merchant-verify"))
                 .andExpect(method(HttpMethod.POST))
@@ -59,5 +55,52 @@ class VtpassVerificationClientTest {
         assertEquals("PREPAID", response.accountType());
         assertEquals("100.00", response.minimumAmount().toPlainString());
         server.verify();
+    }
+
+    @Test
+    void verifiesJambProfileIdUsingSelectedVariationAsType() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
+        VtpassVerificationClient client = configuredClient(restTemplate);
+
+        server.expect(requestTo("https://sandbox.vtpass.com/api/merchant-verify"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("api-key", "api-key-value"))
+                .andExpect(header("secret-key", "secret-key-value"))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_FORM_URLENCODED))
+                .andExpect(content().string(org.hamcrest.Matchers.allOf(
+                        org.hamcrest.Matchers.containsString("billersCode=0123456789"),
+                        org.hamcrest.Matchers.containsString("serviceID=jamb"),
+                        org.hamcrest.Matchers.containsString("type=utme-mock")
+                )))
+                .andRespond(withSuccess("""
+                        {
+                          "code":"000",
+                          "content":{
+                            "Customer_Name":"Capital James"
+                          }
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        VerifyResponse response = client.verify(
+                "EDUCATION",
+                "jamb",
+                "0123456789",
+                "utme-mock"
+        );
+
+        assertTrue(response.valid());
+        assertEquals("jamb", response.serviceId());
+        assertEquals("Capital James", response.customerName());
+        assertEquals("JAMB Profile ID verified", response.message());
+        server.verify();
+    }
+
+    private VtpassVerificationClient configuredClient(RestTemplate restTemplate) {
+        VtpassVerificationClient client = new VtpassVerificationClient(restTemplate);
+        ReflectionTestUtils.setField(client, "baseUrl", "https://sandbox.vtpass.com/api/");
+        ReflectionTestUtils.setField(client, "apiKey", "api-key-value");
+        ReflectionTestUtils.setField(client, "secretKey", "secret-key-value");
+        return client;
     }
 }
