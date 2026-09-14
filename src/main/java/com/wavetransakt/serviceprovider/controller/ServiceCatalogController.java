@@ -5,7 +5,10 @@ import com.wavetransakt.serviceprovider.dto.ServiceCatalogDtos.Provider;
 import com.wavetransakt.serviceprovider.dto.ServiceCatalogDtos.VariationList;
 import com.wavetransakt.serviceprovider.dto.ServiceVerificationDtos.VerifyRequest;
 import com.wavetransakt.serviceprovider.dto.ServiceVerificationDtos.VerifyResponse;
+import com.wavetransakt.serviceprovider.dto.SmileServiceDtos.VerifyEmailRequest;
+import com.wavetransakt.serviceprovider.dto.SmileServiceDtos.VerifyEmailResponse;
 import com.wavetransakt.serviceprovider.vtpass.VtpassCatalogClient;
+import com.wavetransakt.serviceprovider.vtpass.VtpassSmileClient;
 import com.wavetransakt.serviceprovider.vtpass.VtpassVerificationClient;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +29,7 @@ public class ServiceCatalogController {
 
     private final VtpassCatalogClient vtpassCatalogClient;
     private final VtpassVerificationClient vtpassVerificationClient;
+    private final VtpassSmileClient vtpassSmileClient;
 
     @GetMapping("/categories")
     public ResponseEntity<List<Category>> categories() {
@@ -58,5 +62,12 @@ public class ServiceCatalogController {
                         request.option()
                 )
         );
+    }
+
+    @PostMapping("/internet/smile/verify-email")
+    public ResponseEntity<VerifyEmailResponse> verifySmileEmail(
+            @Valid @RequestBody VerifyEmailRequest request
+    ) {
+        return ResponseEntity.ok(vtpassSmileClient.verifyEmail(request.email()));
     }
 }
