@@ -75,7 +75,8 @@ public class VtpassPurchaseClient {
                 }
             }
             case "EDUCATION" -> {
-                if (!"waec".equalsIgnoreCase(serviceId)) {
+                if (!"waec".equalsIgnoreCase(serviceId) &&
+                        !"waec-registration".equalsIgnoreCase(serviceId)) {
                     throw new IllegalArgumentException("Unsupported education provider transport");
                 }
                 form.add("variation_code", requireValue(variationCode, "WAEC variation code"));
@@ -151,6 +152,14 @@ public class VtpassPurchaseClient {
         String purchasedCode = text(body, "purchased_code");
         if (!purchasedCode.isBlank()) {
             return purchasedCode;
+        }
+
+        JsonNode tokens = body.path("tokens");
+        if (tokens.isArray() && !tokens.isEmpty()) {
+            String token = tokens.get(0).asText("").trim();
+            if (!token.isBlank()) {
+                return "Token: " + token;
+            }
         }
 
         JsonNode cards = body.path("cards");
