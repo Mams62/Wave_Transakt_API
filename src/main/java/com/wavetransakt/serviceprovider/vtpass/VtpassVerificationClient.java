@@ -45,12 +45,12 @@ public class VtpassVerificationClient {
         String kind = normalizeKind(serviceKind);
         String safeServiceId = safeToken(serviceId, "service ID");
         String safeReference = safeReference(customerReference);
-        String normalizedOption = normalizeOption(kind, option);
+        String normalizedOption = normalizeOption(kind, safeServiceId, option);
 
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("billersCode", safeReference);
         form.add("serviceID", safeServiceId);
-        if ("ELECTRICITY".equals(kind)) {
+        if ("ELECTRICITY".equals(kind) || "EDUCATION".equals(kind)) {
             form.add("type", normalizedOption);
         }
 
@@ -102,7 +102,7 @@ public class VtpassVerificationClient {
         );
 
         String message = valid
-                ? "Customer verified"
+                ? ("EDUCATION".equals(kind) ? "JAMB Profile ID verified" : "Customer verified")
                 : firstText(body, "response_description", "message");
         if (!valid && message.isBlank()) {
             message = "The customer reference could not be verified";
@@ -132,21 +132,29 @@ public class VtpassVerificationClient {
 
     private String normalizeKind(String value) {
         String kind = value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
-        if (!kind.equals("ELECTRICITY") && !kind.equals("TV")) {
-            throw new IllegalArgumentException("Only ELECTRICITY and TV require this verification flow");
+        if (!kind.equals("ELECTRICITY") && !kind.equals("TV") && !kind.equals("EDUCATION")) {
+            throw new IllegalArgumentException("Only ELECTRICITY, TV and supported EDUCATION products require this verification flow");
         }
         return kind;
     }
 
-    private String normalizeOption(String kind, String value) {
-        if (!"ELECTRICITY".equals(kind)) {
-            return null;
+    private String normalizeOption(String kind, String serviceId, String value) {
+        if ("ELECTRICITY".equals(kind)) {
+            String option = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+            if (!option.equals("prepaid") && !option.equals("postpaid")) {
+                throw new IllegalArgumentException("Electricity meter type must be prepaid or postpaid");
+            }
+            return option;
         }
-        String option = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
-        if (!option.equals("prepaid") && !option.equals("postpaid")) {
-            throw new IllegalArgumentException("Electricity meter type must be prepaid or postpaid");
+
+        if ("EDUCATION".equals(kind)) {
+            if (!"jamb".equalsIgnoreCase(serviceId)) {
+                throw new IllegalArgumentException("Only JAMB uses the Education verification flow");
+            }
+            return safeToken(value, "JAMB variation code");
         }
-        return option;
+
+        return null;
     }
 
     private String safeToken(String value, String field) {
