@@ -29,6 +29,7 @@ public class SmilePaymentService {
     private final VtpassSmileClient smileClient;
     private final VtpassPurchaseClient purchaseClient;
     private final ServicePaymentReservationService reservationService;
+    private final ServicePaymentResponseMapper responseMapper;
 
     public ServicePaymentResponse purchase(
             UUID userId,
@@ -99,7 +100,7 @@ public class SmilePaymentService {
 
         ServicePayment payment = reservation.payment();
         if (!reservation.created()) {
-            return toResponse(payment);
+            return responseMapper.toResponse(payment);
         }
 
         ProviderResult providerResult = purchaseClient.purchase(
@@ -113,7 +114,7 @@ public class SmilePaymentService {
                 payment.getProviderRequestId()
         );
 
-        return toResponse(
+        return responseMapper.toResponse(
                 reservationService.applyProviderResult(
                         userId,
                         payment.getId(),
@@ -180,25 +181,5 @@ public class SmilePaymentService {
             );
         }
         return phone;
-    }
-
-    private ServicePaymentResponse toResponse(ServicePayment payment) {
-        return new ServicePaymentResponse(
-                payment.getId(),
-                payment.getReference(),
-                payment.getProviderRequestId(),
-                payment.getServiceKind(),
-                payment.getServiceId(),
-                payment.getServiceName(),
-                payment.getVariationCode(),
-                payment.getRecipient(),
-                payment.getAmount(),
-                payment.getCurrency(),
-                payment.getStatus().name(),
-                payment.getProviderStatus(),
-                payment.getProviderTransactionId(),
-                payment.getProviderMessage(),
-                payment.getCreatedAt()
-        );
     }
 }
