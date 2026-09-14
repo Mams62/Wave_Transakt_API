@@ -5,6 +5,7 @@ public enum LedgerEventType {
     WALLET_TRANSFER,
     PAYSTACK_FUNDING,
     BILL_PAYMENT,
+    EXTERNAL_BANK_TRANSFER,
     REVERSAL,
     ADJUSTMENT
 }
