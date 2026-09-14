@@ -3,6 +3,7 @@ package com.wavetransakt.serviceprovider.controller;
 import com.wavetransakt.serviceprovider.dto.ServicePaymentResponse;
 import com.wavetransakt.serviceprovider.dto.ServicePurchaseRequest;
 import com.wavetransakt.serviceprovider.dto.SmileServiceDtos.PurchaseRequest;
+import com.wavetransakt.serviceprovider.dto.WaecServiceDtos.RegistrationPurchaseRequest;
 import com.wavetransakt.serviceprovider.dto.WaecServiceDtos.ResultCheckerPurchaseRequest;
 import com.wavetransakt.serviceprovider.service.ServicePaymentService;
 import com.wavetransakt.serviceprovider.service.SmilePaymentService;
@@ -72,6 +73,24 @@ public class ServicePaymentController {
         User user = authenticatedUser(authentication);
         return ResponseEntity.ok(
                 waecPaymentService.purchaseResultChecker(
+                        user.getId(),
+                        idempotencyKey,
+                        request
+                )
+        );
+    }
+
+    @PostMapping("/pay/education/waec-registration")
+    public ResponseEntity<ServicePaymentResponse> payWaecRegistration(
+            Authentication authentication,
+            @RequestHeader(value = "Idempotency-Key", required = false)
+            String idempotencyKey,
+            @Valid @RequestBody RegistrationPurchaseRequest request
+    ) {
+        requireProviderPaymentsEnabled();
+        User user = authenticatedUser(authentication);
+        return ResponseEntity.ok(
+                waecPaymentService.purchaseRegistrationPin(
                         user.getId(),
                         idempotencyKey,
                         request
