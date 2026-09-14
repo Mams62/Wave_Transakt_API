@@ -75,13 +75,16 @@ public class VtpassPurchaseClient {
                 }
             }
             case "EDUCATION" -> {
-                if (!"waec".equalsIgnoreCase(serviceId) &&
-                        !"waec-registration".equalsIgnoreCase(serviceId)) {
+                form.add("variation_code", requireValue(variationCode, "Education variation code"));
+                form.add("phone", requireValue(customerPhone, "Customer phone"));
+                if ("waec".equalsIgnoreCase(serviceId) ||
+                        "waec-registration".equalsIgnoreCase(serviceId)) {
+                    form.add("quantity", "1");
+                } else if ("jamb".equalsIgnoreCase(serviceId)) {
+                    form.add("billersCode", requireValue(recipient, "JAMB Profile ID"));
+                } else {
                     throw new IllegalArgumentException("Unsupported education provider transport");
                 }
-                form.add("variation_code", requireValue(variationCode, "WAEC variation code"));
-                form.add("quantity", "1");
-                form.add("phone", requireValue(customerPhone, "Customer phone"));
             }
             default -> throw new IllegalArgumentException("Unsupported provider service kind");
         }
