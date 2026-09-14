@@ -1,10 +1,11 @@
 package com.wavetransakt.serviceprovider.controller;
 
+import com.wavetransakt.serviceprovider.dto.JambServiceDtos.PurchaseRequest;
 import com.wavetransakt.serviceprovider.dto.ServicePaymentResponse;
 import com.wavetransakt.serviceprovider.dto.ServicePurchaseRequest;
-import com.wavetransakt.serviceprovider.dto.SmileServiceDtos.PurchaseRequest;
 import com.wavetransakt.serviceprovider.dto.WaecServiceDtos.RegistrationPurchaseRequest;
 import com.wavetransakt.serviceprovider.dto.WaecServiceDtos.ResultCheckerPurchaseRequest;
+import com.wavetransakt.serviceprovider.service.JambPaymentService;
 import com.wavetransakt.serviceprovider.service.ServicePaymentService;
 import com.wavetransakt.serviceprovider.service.SmilePaymentService;
 import com.wavetransakt.serviceprovider.service.WaecPaymentService;
@@ -30,6 +31,7 @@ public class ServicePaymentController {
     private final ServicePaymentService servicePaymentService;
     private final SmilePaymentService smilePaymentService;
     private final WaecPaymentService waecPaymentService;
+    private final JambPaymentService jambPaymentService;
 
     @Value("${wave.services.provider-payments-enabled:false}")
     private boolean providerPaymentsEnabled;
@@ -53,7 +55,7 @@ public class ServicePaymentController {
             Authentication authentication,
             @RequestHeader(value = "Idempotency-Key", required = false)
             String idempotencyKey,
-            @Valid @RequestBody PurchaseRequest request
+            @Valid @RequestBody com.wavetransakt.serviceprovider.dto.SmileServiceDtos.PurchaseRequest request
     ) {
         requireProviderPaymentsEnabled();
         User user = authenticatedUser(authentication);
@@ -95,6 +97,20 @@ public class ServicePaymentController {
                         idempotencyKey,
                         request
                 )
+        );
+    }
+
+    @PostMapping("/pay/education/jamb")
+    public ResponseEntity<ServicePaymentResponse> payJamb(
+            Authentication authentication,
+            @RequestHeader(value = "Idempotency-Key", required = false)
+            String idempotencyKey,
+            @Valid @RequestBody PurchaseRequest request
+    ) {
+        requireProviderPaymentsEnabled();
+        User user = authenticatedUser(authentication);
+        return ResponseEntity.ok(
+                jambPaymentService.purchase(user.getId(), idempotencyKey, request)
         );
     }
 
