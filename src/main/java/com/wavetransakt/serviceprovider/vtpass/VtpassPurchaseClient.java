@@ -65,13 +65,14 @@ public class VtpassPurchaseClient {
                 }
             }
             case "INTERNET" -> {
-                if (!"spectranet".equalsIgnoreCase(serviceId)) {
+                form.add("billersCode", recipient);
+                form.add("variation_code", requireValue(variationCode, "Internet variation code"));
+                form.add("phone", requireValue(customerPhone, "Customer phone"));
+                if ("spectranet".equalsIgnoreCase(serviceId)) {
+                    form.add("quantity", "1");
+                } else if (!"smile-direct".equalsIgnoreCase(serviceId)) {
                     throw new IllegalArgumentException("Unsupported internet provider transport");
                 }
-                form.add("billersCode", recipient);
-                form.add("variation_code", requireValue(variationCode, "Spectranet variation code"));
-                form.add("quantity", "1");
-                form.add("phone", requireValue(customerPhone, "Customer phone"));
             }
             default -> throw new IllegalArgumentException("Unsupported provider service kind");
         }
