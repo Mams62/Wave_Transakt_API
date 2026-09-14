@@ -2,7 +2,9 @@ package com.wavetransakt.serviceprovider.controller;
 
 import com.wavetransakt.serviceprovider.dto.ServicePaymentResponse;
 import com.wavetransakt.serviceprovider.dto.ServicePurchaseRequest;
+import com.wavetransakt.serviceprovider.dto.SmileServiceDtos.PurchaseRequest;
 import com.wavetransakt.serviceprovider.service.ServicePaymentService;
+import com.wavetransakt.serviceprovider.service.SmilePaymentService;
 import com.wavetransakt.user.entity.User;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ServicePaymentController {
 
     private final ServicePaymentService servicePaymentService;
+    private final SmilePaymentService smilePaymentService;
 
     @Value("${wave.services.provider-payments-enabled:false}")
     private boolean providerPaymentsEnabled;
@@ -34,15 +37,24 @@ public class ServicePaymentController {
             String idempotencyKey,
             @Valid @RequestBody ServicePurchaseRequest request
     ) {
-        if (!providerPaymentsEnabled) {
-            throw new IllegalArgumentException(
-                    "Service purchases are temporarily paused while settlement moves to the Wema wallet. Catalog browsing remains enabled."
-            );
-        }
-
+        requireProviderPaymentsEnabled();
         User user = authenticatedUser(authentication);
         return ResponseEntity.ok(
                 servicePaymentService.purchase(user.getId(), idempotencyKey, request)
+        );
+    }
+
+    @PostMapping("/pay/internet/smile")
+    public ResponseEntity<ServicePaymentResponse> paySmile(
+            Authentication authentication,
+            @RequestHeader(value = "Idempotency-Key", required = false)
+            String idempotencyKey,
+            @Valid @RequestBody PurchaseRequest request
+    ) {
+        requireProviderPaymentsEnabled();
+        User user = authenticatedUser(authentication);
+        return ResponseEntity.ok(
+                smilePaymentService.purchase(user.getId(), idempotencyKey, request)
         );
     }
 
@@ -66,6 +78,14 @@ public class ServicePaymentController {
         return ResponseEntity.ok(
                 servicePaymentService.requery(user.getId(), reference)
         );
+    }
+
+    private void requireProviderPaymentsEnabled() {
+        if (!providerPaymentsEnabled) {
+            throw new IllegalArgumentException(
+                    "Service purchases are temporarily paused while settlement moves to the Wema wallet. Catalog browsing remains enabled."
+            );
+        }
     }
 
     private User authenticatedUser(Authentication authentication) {
