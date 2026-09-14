@@ -5,6 +5,7 @@ import com.wavetransakt.serviceprovider.dto.ServiceCatalogDtos.Variation;
 import com.wavetransakt.serviceprovider.dto.ServiceCatalogDtos.VariationList;
 import com.wavetransakt.serviceprovider.dto.ServicePaymentResponse;
 import com.wavetransakt.serviceprovider.dto.ServicePurchaseRequest;
+import com.wavetransakt.serviceprovider.dto.ServiceVerificationDtos.VerifyResponse;
 import com.wavetransakt.serviceprovider.entity.ServicePayment;
 import com.wavetransakt.serviceprovider.entity.ServicePaymentStatus;
 import com.wavetransakt.serviceprovider.service.ServicePaymentReservationService.CanonicalServiceRequest;
@@ -12,12 +13,12 @@ import com.wavetransakt.serviceprovider.service.ServicePaymentReservationService
 import com.wavetransakt.serviceprovider.vtpass.VtpassCatalogClient;
 import com.wavetransakt.serviceprovider.vtpass.VtpassPurchaseClient;
 import com.wavetransakt.serviceprovider.vtpass.VtpassPurchaseClient.ProviderResult;
+import com.wavetransakt.serviceprovider.vtpass.VtpassVerificationClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -27,6 +28,7 @@ public class ServicePaymentService {
 
     private final VtpassCatalogClient catalogClient;
     private final VtpassPurchaseClient purchaseClient;
+    private final VtpassVerificationClient verificationClient;
     private final ServicePaymentReservationService reservationService;
 
     public ServicePaymentResponse purchase(
@@ -60,6 +62,8 @@ public class ServicePaymentService {
                 payment.getVariationCode(),
                 payment.getAmount(),
                 payment.getRecipient(),
+                payment.getCustomerPhone(),
+                payment.getServiceOption(),
                 payment.getProviderRequestId()
         );
 
@@ -101,9 +105,9 @@ public class ServicePaymentService {
         String catalogIdentifier = switch (kind) {
             case "AIRTIME" -> "airtime";
             case "DATA" -> "data";
-            default -> throw new IllegalArgumentException(
-                    "Only AIRTIME and DATA are enabled in the controlled service-payment stage"
-            );
+            case "ELECTRICITY" -> "electricity-bill";
+            case "TV" -> "tv-subscription";
+            default -> throw new IllegalArgumentException("Unsupported service kind");
         };
 
         String serviceId = request.serviceId().trim();
@@ -112,45 +116,69 @@ public class ServicePaymentService {
                 .filter(item -> serviceId.equalsIgnoreCase(item.serviceId()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Selected provider is not available in the connected sandbox catalog"
+                        "Selected provider is not available in the connected provider catalog"
                 ));
 
         String recipient = request.recipient().trim();
-        BigDecimal amount;
+        String customerPhone = null;
+        String serviceOption = null;
         String variationCode = null;
+        BigDecimal amount;
 
-        if ("DATA".equals(kind)) {
-            if (request.variationCode() == null || request.variationCode().isBlank()) {
-                throw new IllegalArgumentException("A data bundle variation is required");
-            }
-
-            variationCode = request.variationCode().trim();
-            VariationList variationList = catalogClient.getVariations(provider.serviceId());
-            String requestedVariation = variationCode;
-            Variation variation = variationList.variations()
-                    .stream()
-                    .filter(item -> requestedVariation.equalsIgnoreCase(item.code()))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Selected data bundle is no longer available"
-                    ));
-
-            if (variation.amount() != null) {
-                amount = normalizeAmount(variation.amount());
-                if (request.amount() != null && variation.fixedPrice() &&
-                        normalizeAmount(request.amount()).compareTo(amount) != 0) {
-                    throw new IllegalArgumentException(
-                            "The selected data bundle price has changed; refresh plans and try again"
-                    );
+        switch (kind) {
+            case "AIRTIME" -> {
+                recipient = normalizePhone(recipient, "Recipient");
+                customerPhone = recipient;
+                if (hasText(request.variationCode())) {
+                    throw new IllegalArgumentException("Airtime does not use a variation code");
                 }
-            } else {
                 amount = normalizeAmount(request.amount());
             }
-        } else {
-            if (request.variationCode() != null && !request.variationCode().isBlank()) {
-                throw new IllegalArgumentException("Airtime does not use a variation code");
+            case "DATA" -> {
+                recipient = normalizePhone(recipient, "Recipient");
+                customerPhone = recipient;
+                variationCode = requireText(request.variationCode(), "A data bundle variation is required");
+                Variation variation = requireVariation(provider.serviceId(), variationCode, "Selected data bundle is no longer available");
+                amount = resolveVariationAmount(request.amount(), variation, "The selected data bundle price has changed; refresh plans and try again");
             }
-            amount = normalizeAmount(request.amount());
+            case "ELECTRICITY" -> {
+                serviceOption = normalizeMeterType(request.option());
+                variationCode = serviceOption;
+                customerPhone = normalizePhone(request.customerPhone(), "Customer phone");
+
+                VerifyResponse verification = verificationClient.verify(
+                        kind,
+                        provider.serviceId(),
+                        recipient,
+                        serviceOption
+                );
+                requireVerified(verification);
+
+                amount = normalizeAmount(request.amount());
+                if (verification.minimumAmount() != null &&
+                        amount.compareTo(verification.minimumAmount()) < 0) {
+                    throw new IllegalArgumentException(
+                            "Amount is below the verified customer minimum of NGN " + verification.minimumAmount()
+                    );
+                }
+            }
+            case "TV" -> {
+                serviceOption = normalizeTvOption(request.option());
+                customerPhone = normalizePhone(request.customerPhone(), "Customer phone");
+                variationCode = requireText(request.variationCode(), "A TV bouquet variation is required");
+
+                VerifyResponse verification = verificationClient.verify(
+                        kind,
+                        provider.serviceId(),
+                        recipient,
+                        null
+                );
+                requireVerified(verification);
+
+                Variation variation = requireVariation(provider.serviceId(), variationCode, "Selected TV bouquet is no longer available");
+                amount = resolveVariationAmount(request.amount(), variation, "The selected TV bouquet price has changed; refresh bouquets and try again");
+            }
+            default -> throw new IllegalArgumentException("Unsupported service kind");
         }
 
         validateProviderLimits(provider, amount);
@@ -161,9 +189,88 @@ public class ServicePaymentService {
                 provider.name(),
                 variationCode,
                 recipient,
+                customerPhone,
+                serviceOption,
                 amount,
                 request.transactionPin()
         );
+    }
+
+    private Variation requireVariation(String serviceId, String variationCode, String message) {
+        VariationList variationList = catalogClient.getVariations(serviceId);
+        return variationList.variations()
+                .stream()
+                .filter(item -> variationCode.equalsIgnoreCase(item.code()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(message));
+    }
+
+    private BigDecimal resolveVariationAmount(
+            BigDecimal requestedAmount,
+            Variation variation,
+            String changedPriceMessage
+    ) {
+        if (variation.amount() == null) {
+            return normalizeAmount(requestedAmount);
+        }
+
+        BigDecimal currentAmount = normalizeAmount(variation.amount());
+        if (requestedAmount != null && variation.fixedPrice() &&
+                normalizeAmount(requestedAmount).compareTo(currentAmount) != 0) {
+            throw new IllegalArgumentException(changedPriceMessage);
+        }
+        return currentAmount;
+    }
+
+    private void requireVerified(VerifyResponse verification) {
+        if (verification == null || !verification.valid()) {
+            String message = verification == null ? null : verification.message();
+            throw new IllegalArgumentException(
+                    message == null || message.isBlank()
+                            ? "Customer reference could not be verified"
+                            : message
+            );
+        }
+    }
+
+    private String normalizePhone(String value, String label) {
+        String phone = value == null ? "" : value.trim();
+        if (!phone.matches("\\d{10,15}")) {
+            throw new IllegalArgumentException(label + " must contain 10 to 15 digits");
+        }
+        return phone;
+    }
+
+    private String normalizeMeterType(String value) {
+        String option = requireText(value, "Electricity meter type is required")
+                .toLowerCase(Locale.ROOT);
+        if (!option.equals("prepaid") && !option.equals("postpaid")) {
+            throw new IllegalArgumentException("Electricity meter type must be prepaid or postpaid");
+        }
+        return option;
+    }
+
+    private String normalizeTvOption(String value) {
+        String option = value == null || value.isBlank()
+                ? "change"
+                : value.trim().toLowerCase(Locale.ROOT);
+        if (!option.equals("change")) {
+            throw new IllegalArgumentException(
+                    "Only TV bouquet change/top-up is enabled in this stage; renewal requires the provider renewal amount flow"
+            );
+        }
+        return option;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private String requireText(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(message);
+        }
+        return value.trim();
     }
 
     private void validateProviderLimits(Provider provider, BigDecimal amount) {
