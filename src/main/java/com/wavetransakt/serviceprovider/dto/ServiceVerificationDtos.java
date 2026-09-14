@@ -10,7 +10,7 @@ public final class ServiceVerificationDtos {
 
     public record VerifyRequest(
             @NotBlank(message = "Service kind is required")
-            @Pattern(regexp = "(?i)ELECTRICITY|TV", message = "Service kind must be ELECTRICITY or TV")
+            @Pattern(regexp = "(?i)ELECTRICITY|TV|EDUCATION", message = "Service kind must be ELECTRICITY, TV or EDUCATION")
             String serviceKind,
             @NotBlank(message = "Service ID is required")
             @Pattern(regexp = "[A-Za-z0-9_-]{1,80}", message = "Invalid service ID")
