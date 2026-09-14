@@ -47,19 +47,41 @@ public class VtpassPurchaseClient {
             String variationCode,
             BigDecimal amount,
             String recipient,
+            String customerPhone,
+            String serviceOption,
             String providerRequestId
     ) {
         validateConfigured();
+        String kind = serviceKind == null ? "" : serviceKind.trim().toUpperCase(Locale.ROOT);
 
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("request_id", providerRequestId);
         form.add("serviceID", serviceId);
         form.add("amount", amount.toPlainString());
-        form.add("phone", recipient);
 
-        if ("DATA".equalsIgnoreCase(serviceKind)) {
-            form.add("billersCode", recipient);
-            form.add("variation_code", variationCode);
+        switch (kind) {
+            case "AIRTIME" -> form.add("phone", recipient);
+            case "DATA" -> {
+                form.add("phone", recipient);
+                form.add("billersCode", recipient);
+                form.add("variation_code", requireValue(variationCode, "Data variation code"));
+            }
+            case "ELECTRICITY" -> {
+                form.add("phone", requireValue(customerPhone, "Customer phone"));
+                form.add("billersCode", recipient);
+                form.add("variation_code", requireMeterType(serviceOption));
+            }
+            case "TV" -> {
+                form.add("phone", requireValue(customerPhone, "Customer phone"));
+                form.add("billersCode", recipient);
+                form.add("variation_code", requireValue(variationCode, "TV bouquet variation code"));
+                // DSTV/GOTV require subscription_type for bouquet changes. Startimes
+                // does not require it, so omit the field for that provider.
+                if (!"startimes".equalsIgnoreCase(serviceId)) {
+                    form.add("subscription_type", requireTvOption(serviceOption));
+                }
+            }
+            default -> throw new IllegalArgumentException("Unsupported provider service kind");
         }
 
         return post("pay", form);
@@ -184,6 +206,30 @@ public class VtpassPurchaseClient {
                         ? "Provider outcome is uncertain; status must be requeried"
                         : description
         );
+    }
+
+    private String requireValue(String value, String label) {
+        String normalized = value == null ? "" : value.trim();
+        if (normalized.isBlank()) {
+            throw new IllegalArgumentException(label + " is required");
+        }
+        return normalized;
+    }
+
+    private String requireMeterType(String value) {
+        String option = requireValue(value, "Electricity meter type").toLowerCase(Locale.ROOT);
+        if (!option.equals("prepaid") && !option.equals("postpaid")) {
+            throw new IllegalArgumentException("Electricity meter type must be prepaid or postpaid");
+        }
+        return option;
+    }
+
+    private String requireTvOption(String value) {
+        String option = requireValue(value, "TV subscription option").toLowerCase(Locale.ROOT);
+        if (!option.equals("change") && !option.equals("renew")) {
+            throw new IllegalArgumentException("TV subscription option must be change or renew");
+        }
+        return option;
     }
 
     private String normalizedBaseUrl() {
