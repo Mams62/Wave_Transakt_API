@@ -8,8 +8,8 @@ import java.math.BigDecimal;
 public record ServicePurchaseRequest(
         @NotBlank(message = "Service kind is required")
         @Pattern(
-                regexp = "(?i)AIRTIME|DATA",
-                message = "Service kind must be AIRTIME or DATA"
+                regexp = "(?i)AIRTIME|DATA|ELECTRICITY|TV",
+                message = "Service kind must be AIRTIME, DATA, ELECTRICITY or TV"
         )
         String serviceKind,
 
@@ -26,10 +26,22 @@ public record ServicePurchaseRequest(
 
         @NotBlank(message = "Recipient is required")
         @Pattern(
-                regexp = "\\d{10,15}",
-                message = "Recipient must contain 10 to 15 digits"
+                regexp = "[A-Za-z0-9_-]{5,40}",
+                message = "Recipient must contain 5 to 40 letters, digits, underscores or hyphens"
         )
         String recipient,
+
+        @Pattern(
+                regexp = "\\d{10,15}",
+                message = "Customer phone must contain 10 to 15 digits"
+        )
+        String customerPhone,
+
+        @Pattern(
+                regexp = "(?i)prepaid|postpaid|change|renew",
+                message = "Invalid service option"
+        )
+        String option,
 
         @NotBlank(message = "Transaction PIN is required")
         @Pattern(
