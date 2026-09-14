@@ -11,6 +11,7 @@ on:
       - test/provider-terminal-link-state-20260913
       - feat/provider-event-ingress-20260913
       - feat/terminal-provisioning-orchestrator-20260913
+      - feat/card-issuing-foundation-20260914
   pull_request:
     branches:
       - controlled-start-api-20260910
@@ -38,5 +39,5 @@ jobs:
       - name: Compile and package without integration runtime
         run: mvn -B -DskipTests package
 
-      - name: Run merchant safety unit tests
-        run: mvn -B -Dtest=MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,PosClientServiceTest,PosTerminalSessionServiceTest,ProviderTerminalLinkServiceTest,ProviderEventIngressServiceTest,TerminalProvisioningServiceTest test
+      - name: Run merchant and card safety unit tests
+        run: mvn -B -Dtest=MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,InterswitchCardIssuingGatewayTest,WaveCardServiceTest,PosClientServiceTest,PosTerminalSessionServiceTest,ProviderTerminalLinkServiceTest,ProviderEventIngressServiceTest,TerminalProvisioningServiceTest test

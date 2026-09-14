@@ -83,8 +83,11 @@ interswitch:
     settlement-inquiry-enabled: ${WAVE_INTERSWITCH_SETTLEMENT_INQUIRY_ENABLED:false}
     webhook-verification-configured: ${WAVE_INTERSWITCH_WEBHOOK_VERIFICATION_CONFIGURED:false}
   card:
-    # A Card 360 / issuing agreement and approved card programme are required.
+    # Card issuing is a separate provider product from merchant acquiring.
+    # All three flags remain false until explicit provider/issuer approval exists.
     issuing-enabled: ${WAVE_INTERSWITCH_CARD_ISSUING_ENABLED:false}
+    product-approved: ${WAVE_INTERSWITCH_CARD_ISSUING_PRODUCT_APPROVED:false}
+    contactless-program-approved: ${WAVE_INTERSWITCH_CARD_CONTACTLESS_PROGRAM_APPROVED:false}
 
 vtpass:
   base-url: ${WAVE_VTPASS_BASE_URL:https://sandbox.vtpass.com/api/}
