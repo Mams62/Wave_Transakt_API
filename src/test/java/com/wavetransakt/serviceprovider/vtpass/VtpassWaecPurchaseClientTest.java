@@ -119,7 +119,7 @@ class VtpassWaecPurchaseClientTest {
 
         assertEquals(ProviderOutcome.SUCCESS, result.outcome());
         assertEquals("REG-20260914-001", result.transactionId());
-        assertEquals("WAEC-REG-TOKEN-123456", result.fulfillment());
+        assertEquals("Token: WAEC-REG-TOKEN-123456", result.fulfillment());
         server.verify();
     }
 
