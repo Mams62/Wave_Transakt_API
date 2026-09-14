@@ -18,6 +18,7 @@ on:
       - feat/live-waec-registration-20260914
       - feat/live-jamb-pin-20260914
       - feat/interswitch-bank-transfers-20260914
+      - feat/external-bank-transfer-ledger-20260914
   pull_request:
     branches:
       - controlled-start-api-20260910
