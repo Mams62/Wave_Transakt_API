@@ -26,9 +26,7 @@ class VtpassWaecPurchaseClientTest {
         MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
         VtpassPurchaseClient client = new VtpassPurchaseClient(restTemplate);
 
-        ReflectionTestUtils.setField(client, "baseUrl", "https://sandbox.vtpass.com/api/");
-        ReflectionTestUtils.setField(client, "apiKey", "api-key-value");
-        ReflectionTestUtils.setField(client, "secretKey", "secret-key-value");
+        configure(client);
 
         server.expect(requestTo("https://sandbox.vtpass.com/api/pay"))
                 .andExpect(method(HttpMethod.POST))
@@ -73,5 +71,61 @@ class VtpassWaecPurchaseClientTest {
                 result.fulfillment()
         );
         server.verify();
+    }
+
+    @Test
+    void sendsWaecRegistrationQuantityOneAndParsesTokenArray() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
+        VtpassPurchaseClient client = new VtpassPurchaseClient(restTemplate);
+
+        configure(client);
+
+        server.expect(requestTo("https://sandbox.vtpass.com/api/pay"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("api-key", "api-key-value"))
+                .andExpect(header("secret-key", "secret-key-value"))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_FORM_URLENCODED))
+                .andExpect(content().string(org.hamcrest.Matchers.allOf(
+                        org.hamcrest.Matchers.containsString("serviceID=waec-registration"),
+                        org.hamcrest.Matchers.containsString("variation_code=waec-registration"),
+                        org.hamcrest.Matchers.containsString("quantity=1"),
+                        org.hamcrest.Matchers.containsString("phone=08012345678")
+                )))
+                .andRespond(withSuccess("""
+                        {
+                          "code":"000",
+                          "content":{
+                            "transactions":{
+                              "status":"delivered",
+                              "transactionId":"REG-20260914-001"
+                            }
+                          },
+                          "response_description":"TRANSACTION SUCCESSFUL",
+                          "tokens":["WAEC-REG-TOKEN-123456"]
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        ProviderResult result = client.purchase(
+                "EDUCATION",
+                "waec-registration",
+                "waec-registration",
+                BigDecimal.valueOf(20000),
+                "08012345678",
+                "08012345678",
+                "quantity:1",
+                "202609141530waecreg0001"
+        );
+
+        assertEquals(ProviderOutcome.SUCCESS, result.outcome());
+        assertEquals("REG-20260914-001", result.transactionId());
+        assertEquals("Token: WAEC-REG-TOKEN-123456", result.fulfillment());
+        server.verify();
+    }
+
+    private void configure(VtpassPurchaseClient client) {
+        ReflectionTestUtils.setField(client, "baseUrl", "https://sandbox.vtpass.com/api/");
+        ReflectionTestUtils.setField(client, "apiKey", "api-key-value");
+        ReflectionTestUtils.setField(client, "secretKey", "secret-key-value");
     }
 }

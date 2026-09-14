@@ -3,6 +3,7 @@ package com.wavetransakt.serviceprovider.service;
 import com.wavetransakt.serviceprovider.dto.ServiceCatalogDtos.Provider;
 import com.wavetransakt.serviceprovider.dto.ServiceCatalogDtos.Variation;
 import com.wavetransakt.serviceprovider.dto.ServicePaymentResponse;
+import com.wavetransakt.serviceprovider.dto.WaecServiceDtos.RegistrationPurchaseRequest;
 import com.wavetransakt.serviceprovider.dto.WaecServiceDtos.ResultCheckerPurchaseRequest;
 import com.wavetransakt.serviceprovider.entity.ServicePayment;
 import com.wavetransakt.serviceprovider.service.ServicePaymentReservationService.CanonicalServiceRequest;
@@ -21,7 +22,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class WaecPaymentService {
 
-    private static final String SERVICE_ID = "waec";
+    private static final String RESULT_CHECKER_SERVICE_ID = "waec";
+    private static final String REGISTRATION_SERVICE_ID = "waec-registration";
 
     private final VtpassCatalogClient catalogClient;
     private final VtpassPurchaseClient purchaseClient;
@@ -36,41 +38,86 @@ public class WaecPaymentService {
         if (request == null) {
             throw new IllegalArgumentException("WAEC result checker purchase request is required");
         }
+        return purchaseProduct(
+                userId,
+                idempotencyKey,
+                RESULT_CHECKER_SERVICE_ID,
+                "WAEC Result Checker",
+                request.variationCode(),
+                request.amount(),
+                request.customerPhone(),
+                request.transactionPin()
+        );
+    }
 
+    public ServicePaymentResponse purchaseRegistrationPin(
+            UUID userId,
+            String idempotencyKey,
+            RegistrationPurchaseRequest request
+    ) {
+        if (request == null) {
+            throw new IllegalArgumentException("WAEC registration purchase request is required");
+        }
+        return purchaseProduct(
+                userId,
+                idempotencyKey,
+                REGISTRATION_SERVICE_ID,
+                "WAEC Registration PIN",
+                request.variationCode(),
+                request.amount(),
+                request.customerPhone(),
+                request.transactionPin()
+        );
+    }
+
+    private ServicePaymentResponse purchaseProduct(
+            UUID userId,
+            String idempotencyKey,
+            String serviceId,
+            String productLabel,
+            String rawVariationCode,
+            BigDecimal requestedAmount,
+            String rawCustomerPhone,
+            String transactionPin
+    ) {
         purchaseClient.validateConfigured();
 
         Provider provider = catalogClient.getProviders("education")
                 .stream()
-                .filter(item -> SERVICE_ID.equalsIgnoreCase(item.serviceId()))
+                .filter(item -> serviceId.equalsIgnoreCase(item.serviceId()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "WAEC Result Checker is not available in the connected provider catalog"
+                        productLabel + " is not available in the connected provider catalog"
                 ));
 
-        String variationCode = request.variationCode().trim();
-        Variation variation = catalogClient.getVariations(SERVICE_ID)
+        String variationCode = rawVariationCode == null ? "" : rawVariationCode.trim();
+        if (variationCode.isBlank()) {
+            throw new IllegalArgumentException(productLabel + " variation is required");
+        }
+
+        Variation variation = catalogClient.getVariations(serviceId)
                 .variations()
                 .stream()
                 .filter(item -> variationCode.equalsIgnoreCase(item.code()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Selected WAEC Result Checker option is no longer available"
+                        "Selected " + productLabel + " option is no longer available"
                 ));
 
-        BigDecimal amount = resolveVariationAmount(request.amount(), variation);
+        BigDecimal amount = resolveVariationAmount(requestedAmount, variation);
         validateProviderLimits(provider, amount);
-        String phone = normalizePhone(request.customerPhone());
+        String phone = normalizePhone(rawCustomerPhone);
 
         CanonicalServiceRequest canonical = new CanonicalServiceRequest(
                 "EDUCATION",
-                SERVICE_ID,
+                serviceId,
                 provider.name(),
                 variationCode,
                 phone,
                 phone,
                 "quantity:1",
                 amount,
-                request.transactionPin()
+                transactionPin
         );
 
         Reservation reservation = reservationService.reserve(

@@ -15,6 +15,7 @@ on:
       - feat/live-electricity-tv-services-20260914
       - feat/live-smile-internet-20260914
       - feat/live-waec-result-checker-20260914
+      - feat/live-waec-registration-20260914
   pull_request:
     branches:
       - controlled-start-api-20260910
