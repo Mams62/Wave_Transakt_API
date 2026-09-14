@@ -13,6 +13,7 @@ on:
       - feat/terminal-provisioning-orchestrator-20260913
       - feat/card-issuing-foundation-20260914
       - feat/live-electricity-tv-services-20260914
+      - feat/live-smile-internet-20260914
   pull_request:
     branches:
       - controlled-start-api-20260910
@@ -41,4 +42,4 @@ jobs:
         run: mvn -B -DskipTests package
 
       - name: Run financial, merchant and card safety unit tests
-        run: mvn -B -Dtest=ServicePaymentServiceTest,VtpassVerificationClientTest,MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,InterswitchCardIssuingGatewayTest,WaveCardServiceTest,PosClientServiceTest,PosTerminalSessionServiceTest,ProviderTerminalLinkServiceTest,ProviderEventIngressServiceTest,TerminalProvisioningServiceTest test
+        run: mvn -B -Dtest=ServicePaymentServiceTest,VtpassVerificationClientTest,VtpassSmileClientTest,SmilePaymentServiceTest,MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,InterswitchCardIssuingGatewayTest,WaveCardServiceTest,PosClientServiceTest,PosTerminalSessionServiceTest,ProviderTerminalLinkServiceTest,ProviderEventIngressServiceTest,TerminalProvisioningServiceTest test
