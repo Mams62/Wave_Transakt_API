@@ -1,0 +1,44 @@
+{
+  "family": "wave-transakt-api-staging",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "runtimePlatform": {"cpuArchitecture": "X86_64", "operatingSystemFamily": "LINUX"},
+  "containerDefinitions": [
+    {
+      "name": "wave-transakt-api",
+      "image": "REPLACE_WITH_PRIVATE_ECR_IMAGE_DIGEST",
+      "essential": true,
+      "portMappings": [{"containerPort": 8080, "protocol": "tcp"}],
+      "environment": [
+        {"name": "PORT", "value": "8080"},
+        {"name": "WAVE_EXTERNAL_BANK_TRANSFER_EXECUTION_ENABLED", "value": "false"},
+        {"name": "WAVE_INTERSWITCH_ACQUIRING_ENABLED", "value": "false"},
+        {"name": "WAVE_INTERSWITCH_CARD_ISSUING_ENABLED", "value": "false"},
+        {"name": "WAVE_INTERSWITCH_CONTACTLESS_ENABLED", "value": "false"}
+      ],
+      "secrets": [
+        {"name": "WAVE_DB_URL", "valueFrom": "REPLACE_WITH_SECRETS_MANAGER_ARN:WAVE_DB_URL::"},
+        {"name": "WAVE_DB_USERNAME", "valueFrom": "REPLACE_WITH_SECRETS_MANAGER_ARN:WAVE_DB_USERNAME::"},
+        {"name": "WAVE_DB_PASSWORD", "valueFrom": "REPLACE_WITH_SECRETS_MANAGER_ARN:WAVE_DB_PASSWORD::"},
+        {"name": "WAVE_JWT_SECRET", "valueFrom": "REPLACE_WITH_SECRETS_MANAGER_ARN:WAVE_JWT_SECRET::"}
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/api/health >/dev/null || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/wave-transakt/staging/api",
+          "awslogs-region": "REPLACE_WITH_AWS_REGION",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
