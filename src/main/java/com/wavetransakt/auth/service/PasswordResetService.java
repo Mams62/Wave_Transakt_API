@@ -67,7 +67,11 @@ public class PasswordResetService {
         return returnVerificationCode ? code : null;
     }
 
-    /** Resets only the account-login PIN; the transaction PIN is not changed. */
+    /**
+     * Resets only the account-login PIN; the transaction PIN is not changed.
+     * Advancing authVersion atomically revokes all JWTs, login OTPs and face
+     * challenges issued before this credential change.
+     */
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
         User user = findUserOptional(request.getIdentifier())
@@ -87,6 +91,7 @@ public class PasswordResetService {
         }
 
         user.setPassword(passwordEncoder.encode(newPin));
+        user.advanceAuthVersion();
         userRepository.save(user);
 
         token.setUsed(true);

@@ -60,6 +60,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
 
+            long tokenAuthVersion = jwtService.extractAuthVersion(token);
+            if (tokenAuthVersion != user.getAuthVersion()) {
+                log.debug("Rejected stale JWT authentication epoch");
+                filterChain.doFilter(request, response);
+                return;
+            }
+
             if (SecurityContextHolder.getContext().getAuthentication() == null) {
                 String access = jwtService.extractAccess(token);
                 List<SimpleGrantedAuthority> authorities = new ArrayList<>();

@@ -153,6 +153,7 @@ public class VerificationService {
                 .code(null)
                 .codeHash(passwordEncoder.encode(code))
                 .type(type)
+                .authVersion(user.getAuthVersion())
                 .expiresAt(LocalDateTime.now().plusMinutes(10))
                 .used(false)
                 .createdAt(LocalDateTime.now())
@@ -174,6 +175,14 @@ public class VerificationService {
         }
 
         VerificationCode verificationCode = codeOptional.get();
+
+        if (verificationCode.getAuthVersion() != user.getAuthVersion()) {
+            consumeDummyVerificationWork(code);
+            retire(verificationCode);
+            verificationCodeRepository.save(verificationCode);
+            throw invalidCode();
+        }
+
         if (verificationCode.getExpiresAt().isBefore(LocalDateTime.now())) {
             consumeDummyVerificationWork(code);
             retire(verificationCode);

@@ -75,6 +75,7 @@ class FaceLoginChallengeServiceSecurityTest {
     @Test
     void completionConsumesLockedChallengeBeforeJwtIsIssued() {
         User user = activeUser();
+        user.setAuthVersion(4L);
         UUID sessionId = UUID.randomUUID();
         FaceLoginChallenge challenge = activeChallenge(user, sessionId);
         LivenessSession session = LivenessSession.builder()
@@ -88,7 +89,7 @@ class FaceLoginChallengeServiceSecurityTest {
         when(repository.findByTokenHashForUpdate(anyString())).thenReturn(Optional.of(challenge));
         when(livenessSessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
         when(repository.save(challenge)).thenReturn(challenge);
-        when(jwtService.generateToken(user.getId(), user.getEmail())).thenReturn("jwt-token");
+        when(jwtService.generateToken(user.getId(), user.getEmail(), 4L)).thenReturn("jwt-token");
 
         String token = service().complete("challenge-token", sessionId);
 
@@ -99,7 +100,26 @@ class FaceLoginChallengeServiceSecurityTest {
         InOrder inOrder = inOrder(repository, jwtService);
         inOrder.verify(repository).findByTokenHashForUpdate(anyString());
         inOrder.verify(repository).save(challenge);
-        inOrder.verify(jwtService).generateToken(user.getId(), user.getEmail());
+        inOrder.verify(jwtService).generateToken(user.getId(), user.getEmail(), 4L);
+    }
+
+    @Test
+    void staleChallengeCannotReachLivenessOrJwtAfterCredentialReset() {
+        User user = activeUser();
+        user.setAuthVersion(2L);
+        UUID sessionId = UUID.randomUUID();
+        FaceLoginChallenge challenge = activeChallenge(user, sessionId);
+        challenge.setAuthVersion(1L);
+        when(repository.findByTokenHashForUpdate(anyString())).thenReturn(Optional.of(challenge));
+
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
+                () -> service().complete("challenge-token", sessionId)
+        );
+
+        assertTrue(error.getMessage().contains("no longer valid"));
+        verifyNoInteractions(livenessSessionRepository, jwtService);
+        verify(repository, never()).save(any());
     }
 
     @Test
@@ -140,6 +160,7 @@ class FaceLoginChallengeServiceSecurityTest {
                 .user(user)
                 .tokenHash("a".repeat(64))
                 .livenessSessionId(livenessSessionId)
+                .authVersion(user.getAuthVersion())
                 .expiresAt(LocalDateTime.now().plusMinutes(5))
                 .createdAt(LocalDateTime.now())
                 .build();
