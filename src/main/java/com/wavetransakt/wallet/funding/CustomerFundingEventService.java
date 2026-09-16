@@ -38,7 +38,8 @@ public class CustomerFundingEventService {
             throw new IllegalArgumentException("Funding notice is required");
         }
 
-        String providerCode = normalizeRequired(notice.providerCode(), 40, "Provider code").toUpperCase(Locale.ROOT);
+        String providerCode = normalizeRequired(notice.providerCode(), 40, "Provider code")
+                .toUpperCase(Locale.ROOT);
         String providerEventId = normalizeRequired(notice.providerEventId(), 160, "Provider event ID");
 
         CustomerFundingEvent existing = eventRepository
@@ -131,22 +132,28 @@ public class CustomerFundingEventService {
             String accountNumber,
             String providerAccountReference
     ) {
-        if (accountNumber != null) {
-            CustomerFundingAccount byNumber = fundingAccountRepository
-                    .findByProviderCodeAndAccountNumber(providerCode, accountNumber)
-                    .orElse(null);
-            if (byNumber != null) {
-                return byNumber;
+        CustomerFundingAccount byNumber = accountNumber == null
+                ? null
+                : fundingAccountRepository
+                        .findByProviderCodeAndAccountNumber(providerCode, accountNumber)
+                        .orElse(null);
+
+        CustomerFundingAccount byReference = providerAccountReference == null
+                ? null
+                : fundingAccountRepository
+                        .findByProviderCodeAndProviderAccountReference(providerCode, providerAccountReference)
+                        .orElse(null);
+
+        if (accountNumber != null && providerAccountReference != null) {
+            if (byNumber == null || byReference == null ||
+                    byNumber.getId() == null || byReference.getId() == null ||
+                    !byNumber.getId().equals(byReference.getId())) {
+                return null;
             }
+            return byNumber;
         }
 
-        if (providerAccountReference != null) {
-            return fundingAccountRepository
-                    .findByProviderCodeAndProviderAccountReference(providerCode, providerAccountReference)
-                    .orElse(null);
-        }
-
-        return null;
+        return byNumber != null ? byNumber : byReference;
     }
 
     private CustomerFundingEvent locked(UUID eventId) {
