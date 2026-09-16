@@ -159,6 +159,8 @@ management:
         include: health,info
 
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [requestId=%X{requestId:-}] %logger{36} - %msg%n"
   level:
     root: INFO
     com.wavetransakt: ${WAVE_LOG_LEVEL:INFO}
