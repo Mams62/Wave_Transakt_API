@@ -16,8 +16,9 @@ import java.util.regex.Pattern;
  *
  * Failed PIN checks across transfers, QR payments and service payments share
  * one per-user distributed failure budget. Successful PIN checks do not consume
- * that budget. PIN values are never logged, persisted or included in request
- * fingerprints by this component.
+ * that budget. Once the failure threshold is reached, every later PIN attempt
+ * is blocked until the fixed window resets. PIN values are never logged,
+ * persisted or included in request fingerprints by this component.
  */
 @Service
 @RequiredArgsConstructor
@@ -53,6 +54,8 @@ public class TransactionPinGuard {
             throw new IllegalArgumentException("Transaction PIN is not configured");
         }
 
+        requireNotLocked(user.getId());
+
         if (transactionPin == null || !PIN_PATTERN.matcher(transactionPin).matches()) {
             recordFailure(user.getId());
             throw new IllegalArgumentException("Invalid transaction PIN");
@@ -62,6 +65,22 @@ public class TransactionPinGuard {
             recordFailure(user.getId());
             throw new IllegalArgumentException("Invalid transaction PIN");
         }
+
+        /*
+         * Re-check after BCrypt so a concurrent failed attempt that reaches the
+         * threshold while this request is verifying cannot silently bypass an
+         * already-active distributed lock.
+         */
+        requireNotLocked(user.getId());
+    }
+
+    private void requireNotLocked(UUID userId) {
+        rateLimitGuard.requireNotBlocked(
+                FAILURE_POLICY,
+                "USER:" + userId,
+                MAX_FAILURES,
+                FAILURE_WINDOW
+        );
     }
 
     private void recordFailure(UUID userId) {
