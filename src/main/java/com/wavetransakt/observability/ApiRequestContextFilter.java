@@ -25,7 +25,8 @@ import java.util.regex.Pattern;
  * authorization headers, cookies, account numbers, PINs, identity data or
  * provider credentials. When Spring MVC resolved a handler, logs use the route
  * template (for example /api/v1/transfers/bank/{reference}) rather than the
- * concrete request path.
+ * concrete request path. API requests rejected before MVC routing are logged as
+ * UNMATCHED without writing the raw URI.
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -81,14 +82,23 @@ public class ApiRequestContextFilter extends OncePerRequestFilter {
         return "UNMATCHED";
     }
 
+    boolean isApiRequest(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        return uri != null && ("/api".equals(uri) || uri.startsWith("/api/"));
+    }
+
     private void logCompletion(
             HttpServletRequest request,
             HttpServletResponse response,
             long durationMs,
             boolean completedNormally
     ) {
+        if (!isApiRequest(request)) {
+            return;
+        }
+
         String route = safeRouteTemplate(request);
-        if (!route.startsWith("/api/") || "/api/health".equals(route)) {
+        if ("/api/health".equals(route)) {
             return;
         }
 
