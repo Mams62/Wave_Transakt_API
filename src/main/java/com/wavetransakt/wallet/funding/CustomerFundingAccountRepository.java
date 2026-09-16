@@ -11,4 +11,14 @@ public interface CustomerFundingAccountRepository extends JpaRepository<Customer
     List<CustomerFundingAccount> findByWalletIdOrderByCreatedAtAsc(UUID walletId);
 
     Optional<CustomerFundingAccount> findByWalletIdAndProviderCode(UUID walletId, String providerCode);
+
+    Optional<CustomerFundingAccount> findByProviderCodeAndAccountNumber(
+            String providerCode,
+            String accountNumber
+    );
+
+    Optional<CustomerFundingAccount> findByProviderCodeAndProviderAccountReference(
+            String providerCode,
+            String providerAccountReference
+    );
 }
