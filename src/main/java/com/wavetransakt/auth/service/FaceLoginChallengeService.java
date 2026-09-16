@@ -51,34 +51,41 @@ public class FaceLoginChallengeService {
 
     @Transactional(readOnly = true)
     public FaceLoginChallenge requireActive(String rawToken) {
-        if (rawToken == null || rawToken.isBlank()) {
-            throw new IllegalArgumentException("Face verification challenge is required");
-        }
-        FaceLoginChallenge challenge = repository.findByTokenHash(sha256(rawToken.trim()))
-                .orElseThrow(() -> new IllegalArgumentException("Invalid face verification challenge"));
-
-        if (challenge.getConsumedAt() != null) {
-            throw new IllegalStateException("Face verification challenge was already used");
-        }
-        if (challenge.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new IllegalStateException("Face verification challenge expired. Start login again.");
-        }
-        return challenge;
+        return validateActive(findByRawToken(rawToken, false));
     }
 
     @Transactional
     public FaceLoginChallenge bindLivenessSession(String rawToken, UUID livenessSessionId) {
-        FaceLoginChallenge challenge = requireActive(rawToken);
         if (livenessSessionId == null) {
             throw new IllegalArgumentException("Liveness session is required");
         }
+
+        FaceLoginChallenge challenge = validateActive(findByRawToken(rawToken, true));
+
+        UUID existingSessionId = challenge.getLivenessSessionId();
+        if (existingSessionId != null) {
+            if (existingSessionId.equals(livenessSessionId)) {
+                return challenge;
+            }
+            throw new IllegalStateException("Face verification challenge is already bound to another session");
+        }
+
         challenge.setLivenessSessionId(livenessSessionId);
         return repository.save(challenge);
     }
 
     @Transactional
     public String complete(String rawToken, UUID livenessSessionId) {
-        FaceLoginChallenge challenge = requireActive(rawToken);
+        if (livenessSessionId == null) {
+            throw new IllegalArgumentException("Liveness session is required");
+        }
+
+        /*
+         * The pessimistic write lock is the one-time-session gate. A second
+         * concurrent completion waits for the first transaction, then observes
+         * consumedAt and fails before another JWT can be issued.
+         */
+        FaceLoginChallenge challenge = validateActive(findByRawToken(rawToken, true));
 
         if (challenge.getLivenessSessionId() == null ||
                 !challenge.getLivenessSessionId().equals(livenessSessionId)) {
@@ -107,6 +114,28 @@ public class FaceLoginChallengeService {
         repository.save(challenge);
 
         return jwtService.generateToken(user.getId(), user.getEmail());
+    }
+
+    private FaceLoginChallenge findByRawToken(String rawToken, boolean forUpdate) {
+        if (rawToken == null || rawToken.isBlank()) {
+            throw new IllegalArgumentException("Face verification challenge is required");
+        }
+
+        String tokenHash = sha256(rawToken.trim());
+        return (forUpdate
+                ? repository.findByTokenHashForUpdate(tokenHash)
+                : repository.findByTokenHash(tokenHash))
+                .orElseThrow(() -> new IllegalArgumentException("Invalid face verification challenge"));
+    }
+
+    private FaceLoginChallenge validateActive(FaceLoginChallenge challenge) {
+        if (challenge.getConsumedAt() != null) {
+            throw new IllegalStateException("Face verification challenge was already used");
+        }
+        if (challenge.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new IllegalStateException("Face verification challenge expired. Start login again.");
+        }
+        return challenge;
     }
 
     private String sha256(String value) {

@@ -25,6 +25,9 @@ import java.util.Locale;
 @RequiredArgsConstructor
 public class AuthService {
 
+    private static final String INVALID_LOGIN_MESSAGE = "Invalid email/phone or account PIN";
+    private static final String DUMMY_PIN_WORK = "wave-transakt-login-timing-equalizer";
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final WalletService walletService;
@@ -91,10 +94,21 @@ public class AuthService {
 
     @Transactional
     public AuthResponse login(LoginRequest request) {
-        User user = requireUserByIdentifier(request.getIdentifier());
+        User user = findUserByIdentifier(request.getIdentifier());
+
+        if (user == null) {
+            /*
+             * A missing account used to skip BCrypt entirely, making account
+             * existence observable through response timing. Perform one
+             * discarded BCrypt operation before returning the same public
+             * credential error used for a wrong PIN.
+             */
+            passwordEncoder.encode(DUMMY_PIN_WORK);
+            throw new IllegalArgumentException(INVALID_LOGIN_MESSAGE);
+        }
 
         if (!passwordEncoder.matches(request.getAccountPin(), user.getPassword())) {
-            throw new IllegalArgumentException("Invalid email/phone or account PIN");
+            throw new IllegalArgumentException(INVALID_LOGIN_MESSAGE);
         }
         if (!user.isEnabled()) {
             throw new IllegalArgumentException("Account is not active. Please verify your email.");
@@ -262,15 +276,14 @@ public class AuthService {
         return normalized;
     }
 
-    private User requireUserByIdentifier(String identifier) {
+    private User findUserByIdentifier(String identifier) {
         if (identifier == null || identifier.isBlank()) {
             throw new IllegalArgumentException("Email or phone is required");
         }
 
         String raw = identifier.trim();
         return userRepository.findByEmail(raw.toLowerCase(Locale.ROOT))
-                .orElseGet(() -> userRepository.findByPhone(raw)
-                        .orElseThrow(() -> new IllegalArgumentException("Invalid email/phone or account PIN")));
+                .orElseGet(() -> userRepository.findByPhone(raw).orElse(null));
     }
 
     private String maskPhone(String phone) {
