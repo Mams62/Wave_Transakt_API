@@ -41,6 +41,7 @@ public class FaceLoginChallengeService {
         FaceLoginChallenge challenge = FaceLoginChallenge.builder()
                 .user(user)
                 .tokenHash(sha256(rawToken))
+                .authVersion(user.getAuthVersion())
                 .expiresAt(LocalDateTime.now().plusMinutes(CHALLENGE_MINUTES))
                 .createdAt(LocalDateTime.now())
                 .build();
@@ -110,10 +111,26 @@ public class FaceLoginChallengeService {
             throw new IllegalStateException("Account is not active");
         }
 
+        /*
+         * Re-check the authentication epoch immediately before consuming the
+         * challenge and minting a JWT. This prevents a credential reset that
+         * happened after challenge issuance from being bypassed by finishing an
+         * older liveness session.
+         */
+        if (challenge.getAuthVersion() != user.getAuthVersion()) {
+            throw new IllegalStateException(
+                    "Face verification challenge is no longer valid. Start login again."
+            );
+        }
+
         challenge.setConsumedAt(LocalDateTime.now());
         repository.save(challenge);
 
-        return jwtService.generateToken(user.getId(), user.getEmail());
+        return jwtService.generateToken(
+                user.getId(),
+                user.getEmail(),
+                user.getAuthVersion()
+        );
     }
 
     private FaceLoginChallenge findByRawToken(String rawToken, boolean forUpdate) {
@@ -134,6 +151,12 @@ public class FaceLoginChallengeService {
         }
         if (challenge.getExpiresAt().isBefore(LocalDateTime.now())) {
             throw new IllegalStateException("Face verification challenge expired. Start login again.");
+        }
+        if (challenge.getUser() == null
+                || challenge.getAuthVersion() != challenge.getUser().getAuthVersion()) {
+            throw new IllegalStateException(
+                    "Face verification challenge is no longer valid. Start login again."
+            );
         }
         return challenge;
     }
