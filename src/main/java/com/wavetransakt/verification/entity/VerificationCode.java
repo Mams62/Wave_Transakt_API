@@ -1,5 +1,6 @@
 package com.wavetransakt.verification.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.wavetransakt.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -12,7 +13,6 @@ import java.util.UUID;
         name = "verification_codes",
         indexes = {
                 @Index(name = "idx_verification_codes_user_id", columnList = "user_id"),
-                @Index(name = "idx_verification_codes_code", columnList = "code"),
                 @Index(name = "idx_verification_codes_expires_at", columnList = "expires_at")
         }
 )
@@ -36,8 +36,15 @@ public class VerificationCode {
     )
     private User user;
 
-    @Column(name = "code", nullable = false, length = 10)
+    /** Legacy plaintext field kept temporarily for pre-V117 active codes only. */
+    @JsonIgnore
+    @Column(name = "code", length = 10)
     private String code;
+
+    /** One-way password-strength hash for all newly issued verification codes. */
+    @JsonIgnore
+    @Column(name = "code_hash", length = 100)
+    private String codeHash;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "type", nullable = false, length = 50)

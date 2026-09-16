@@ -7,9 +7,12 @@ import com.wavetransakt.verification.entity.VerificationCode;
 import com.wavetransakt.verification.entity.VerificationType;
 import com.wavetransakt.verification.repository.VerificationCodeRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Locale;
@@ -20,6 +23,7 @@ public class VerificationService {
 
     private final VerificationCodeRepository verificationCodeRepository;
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -100,15 +104,16 @@ public class VerificationService {
         verificationCodeRepository
                 .findTopByUserAndTypeAndUsedFalseOrderByCreatedAtDesc(user, type)
                 .ifPresent(existingCode -> {
-                    existingCode.setUsed(true);
+                    retire(existingCode);
                     verificationCodeRepository.save(existingCode);
                 });
 
-        String code = String.format("%06d", secureRandom.nextInt(1_000_000));
+        String code = String.format(Locale.ROOT, "%06d", secureRandom.nextInt(1_000_000));
 
         VerificationCode verificationCode = VerificationCode.builder()
                 .user(user)
-                .code(code)
+                .code(null)
+                .codeHash(passwordEncoder.encode(code))
                 .type(type)
                 .expiresAt(LocalDateTime.now().plusMinutes(10))
                 .used(false)
@@ -131,18 +136,41 @@ public class VerificationService {
                 ));
 
         if (verificationCode.getExpiresAt().isBefore(LocalDateTime.now())) {
-            verificationCode.setUsed(true);
+            retire(verificationCode);
             verificationCodeRepository.save(verificationCode);
             throw new IllegalArgumentException(
                     "Verification code has expired. Please request a new code."
             );
         }
 
-        if (!verificationCode.getCode().equals(code)) {
+        if (!matches(verificationCode, code)) {
             throw new IllegalArgumentException("Invalid verification code");
         }
 
-        verificationCode.setUsed(true);
+        retire(verificationCode);
         verificationCodeRepository.save(verificationCode);
+    }
+
+    private boolean matches(VerificationCode verificationCode, String candidate) {
+        String codeHash = verificationCode.getCodeHash();
+        if (codeHash != null && !codeHash.isBlank()) {
+            return passwordEncoder.matches(candidate, codeHash);
+        }
+
+        String legacyCode = verificationCode.getCode();
+        if (legacyCode == null || legacyCode.isBlank()) {
+            return false;
+        }
+
+        return MessageDigest.isEqual(
+                legacyCode.getBytes(StandardCharsets.UTF_8),
+                candidate.getBytes(StandardCharsets.UTF_8)
+        );
+    }
+
+    private void retire(VerificationCode verificationCode) {
+        verificationCode.setUsed(true);
+        verificationCode.setCode(null);
+        verificationCode.setCodeHash(null);
     }
 }
