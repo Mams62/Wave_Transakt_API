@@ -46,9 +46,10 @@ public class VerificationController {
     }
 
     /**
-     * Allows an existing unverified account to request a fresh email code
-     * instead of registering again. In controlled staging only, the generated
-     * code may be returned while external email delivery is not configured.
+     * Existing unverified accounts may request a fresh email code. Unknown and
+     * already-verified accounts intentionally receive the same public response so
+     * this endpoint cannot be used to enumerate Wave accounts. In controlled
+     * staging only, a generated code may still be returned when explicitly enabled.
      */
     @PostMapping("/email/resend")
     public ResponseEntity<?> resendEmail(
@@ -69,8 +70,8 @@ public class VerificationController {
 
         return ResponseEntity.ok(
                 new VerificationResponse(
-                        "A new email verification code has been created.",
-                        returnVerificationCode ? code : null
+                        "If the account exists and still requires email verification, a new verification code has been created.",
+                        returnVerificationCode && code != null ? code : null
                 )
         );
     }

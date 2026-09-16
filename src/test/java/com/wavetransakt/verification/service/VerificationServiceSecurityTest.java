@@ -23,6 +23,9 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class VerificationServiceSecurityTest {
 
+    private static final String GENERIC_FAILURE =
+            "Invalid or expired verification code";
+
     @Mock
     VerificationCodeRepository verificationCodeRepository;
 
@@ -42,12 +45,7 @@ class VerificationServiceSecurityTest {
         when(verificationCodeRepository.save(any(VerificationCode.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        VerificationService service = new VerificationService(
-                verificationCodeRepository,
-                userRepository,
-                passwordEncoder
-        );
-
+        VerificationService service = service();
         String rawCode = service.createEmailVerificationCode(user);
 
         assertTrue(rawCode.matches("\\d{6}"));
@@ -77,12 +75,7 @@ class VerificationServiceSecurityTest {
                 .thenReturn(Optional.of(stored));
         when(passwordEncoder.matches("123456", "bcrypt-hash")).thenReturn(true);
 
-        VerificationService service = new VerificationService(
-                verificationCodeRepository,
-                userRepository,
-                passwordEncoder
-        );
-
+        VerificationService service = service();
         service.verifyEmail("Person@Example.com", "123456");
 
         assertTrue(Boolean.TRUE.equals(stored.getUsed()));
@@ -95,7 +88,7 @@ class VerificationServiceSecurityTest {
     }
 
     @Test
-    void activeLegacyPlaintextCodeWorksOnceThenIsScrubbed() {
+    void activeLegacyPlaintextCodeWorksOnceThenIsScrubbedWithComparableHashWork() {
         User user = User.builder()
                 .email("legacy@example.com")
                 .emailVerified(false)
@@ -107,19 +100,15 @@ class VerificationServiceSecurityTest {
         when(verificationCodeRepository
                 .findTopByUserAndTypeAndUsedFalseOrderByCreatedAtDesc(user, VerificationType.EMAIL))
                 .thenReturn(Optional.of(stored));
+        stubDummyHash();
 
-        VerificationService service = new VerificationService(
-                verificationCodeRepository,
-                userRepository,
-                passwordEncoder
-        );
-
+        VerificationService service = service();
         service.verifyEmail("legacy@example.com", "654321");
 
         assertTrue(Boolean.TRUE.equals(stored.getUsed()));
         assertNull(stored.getCode());
         assertNull(stored.getCodeHash());
-        verify(passwordEncoder, never()).matches(anyString(), anyString());
+        verify(passwordEncoder).matches("654321", "dummy-hash");
     }
 
     @Test
@@ -133,17 +122,13 @@ class VerificationServiceSecurityTest {
                 .thenReturn(Optional.of(stored));
         when(passwordEncoder.matches("000000", "bcrypt-hash")).thenReturn(false);
 
-        VerificationService service = new VerificationService(
-                verificationCodeRepository,
-                userRepository,
-                passwordEncoder
-        );
-
-        assertThrows(
+        VerificationService service = service();
+        IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
                 () -> service.verifyEmail("person@example.com", "000000")
         );
 
+        assertEquals(GENERIC_FAILURE, exception.getMessage());
         assertFalse(Boolean.TRUE.equals(stored.getUsed()));
         assertEquals("bcrypt-hash", stored.getCodeHash());
         verify(verificationCodeRepository, never()).save(stored);
@@ -151,7 +136,7 @@ class VerificationServiceSecurityTest {
     }
 
     @Test
-    void expiredCodeIsRetiredAndSecretIsScrubbed() {
+    void expiredCodeIsRetiredScrubbedAndUsesGenericFailure() {
         User user = User.builder().email("person@example.com").build();
         VerificationCode stored = VerificationCode.builder()
                 .user(user)
@@ -165,24 +150,109 @@ class VerificationServiceSecurityTest {
         when(verificationCodeRepository
                 .findTopByUserAndTypeAndUsedFalseOrderByCreatedAtDesc(user, VerificationType.EMAIL))
                 .thenReturn(Optional.of(stored));
+        stubDummyHash();
 
-        VerificationService service = new VerificationService(
-                verificationCodeRepository,
-                userRepository,
-                passwordEncoder
-        );
-
+        VerificationService service = service();
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
                 () -> service.verifyEmail("person@example.com", "123456")
         );
 
-        assertTrue(exception.getMessage().toLowerCase().contains("expired"));
+        assertEquals(GENERIC_FAILURE, exception.getMessage());
         assertTrue(Boolean.TRUE.equals(stored.getUsed()));
         assertNull(stored.getCode());
         assertNull(stored.getCodeHash());
         verify(verificationCodeRepository).save(stored);
-        verifyNoInteractions(passwordEncoder);
+        verify(passwordEncoder).matches("123456", "dummy-hash");
+    }
+
+    @Test
+    void unknownAccountAndExistingAccountWithoutCodeReturnSameFailure() {
+        User existing = User.builder().email("existing@example.com").build();
+
+        when(userRepository.findByEmail("missing@example.com")).thenReturn(Optional.empty());
+        when(userRepository.findByEmail("existing@example.com")).thenReturn(Optional.of(existing));
+        when(verificationCodeRepository
+                .findTopByUserAndTypeAndUsedFalseOrderByCreatedAtDesc(existing, VerificationType.EMAIL))
+                .thenReturn(Optional.empty());
+        stubDummyHash();
+
+        VerificationService service = service();
+        IllegalArgumentException missing = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.verifyEmail("missing@example.com", "123456")
+        );
+        IllegalArgumentException noCode = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.verifyEmail("existing@example.com", "123456")
+        );
+
+        assertEquals(GENERIC_FAILURE, missing.getMessage());
+        assertEquals(missing.getMessage(), noCode.getMessage());
+        verify(passwordEncoder, times(2)).matches("123456", "dummy-hash");
+    }
+
+    @Test
+    void unknownLoginOtpIdentifierUsesGenericFailureAndDummyHashWork() {
+        when(userRepository.findByEmail("ghost@example.com")).thenReturn(Optional.empty());
+        when(userRepository.findByPhone("ghost@example.com")).thenReturn(Optional.empty());
+        stubDummyHash();
+
+        VerificationService service = service();
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.verifyLoginPhoneCode("ghost@example.com", "432198")
+        );
+
+        assertEquals(GENERIC_FAILURE, exception.getMessage());
+        verify(passwordEncoder).matches("432198", "dummy-hash");
+        verifyNoInteractions(verificationCodeRepository);
+    }
+
+    @Test
+    void resendUnknownAndAlreadyVerifiedAccountsReturnSameNullOutcome() {
+        User verified = User.builder()
+                .email("verified@example.com")
+                .emailVerified(true)
+                .build();
+        when(userRepository.findByEmail("missing@example.com")).thenReturn(Optional.empty());
+        when(userRepository.findByEmail("verified@example.com")).thenReturn(Optional.of(verified));
+        stubDummyHash();
+
+        VerificationService service = service();
+        String missingResult = service.resendEmailVerification("missing@example.com");
+        String verifiedResult = service.resendEmailVerification("verified@example.com");
+
+        assertNull(missingResult);
+        assertNull(verifiedResult);
+        verify(passwordEncoder, times(2)).matches("000000", "dummy-hash");
+        verifyNoInteractions(verificationCodeRepository);
+    }
+
+    @Test
+    void malformedCodeIsRejectedBeforeAccountLookup() {
+        VerificationService service = service();
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.verifyEmail("target@example.com", "12")
+        );
+
+        assertEquals("Verification code must be exactly 6 digits", exception.getMessage());
+        verifyNoInteractions(userRepository, verificationCodeRepository, passwordEncoder);
+    }
+
+    private VerificationService service() {
+        return new VerificationService(
+                verificationCodeRepository,
+                userRepository,
+                passwordEncoder
+        );
+    }
+
+    private void stubDummyHash() {
+        when(passwordEncoder.encode("000000")).thenReturn("dummy-hash");
+        when(passwordEncoder.matches(anyString(), eq("dummy-hash"))).thenReturn(false);
     }
 
     private VerificationCode activeCode(User user, String legacyCode, String codeHash) {
