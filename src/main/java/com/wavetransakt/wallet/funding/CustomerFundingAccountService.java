@@ -74,7 +74,7 @@ public class CustomerFundingAccountService {
 
         CustomerFundingAccountProvider.ProvisioningReadiness readiness = provider.readiness();
         if (readiness == null || !readiness.ready()) {
-            // Do not echo provider/internal configuration detail to the client.
+            // Never echo provider/internal configuration detail to clients.
             throw new IllegalStateException("Funding account provider is not ready");
         }
 
@@ -118,7 +118,9 @@ public class CustomerFundingAccountService {
             account.setBankCode(trimToNull(result.bankCode()));
             account.setBankName(trimToNull(result.bankName()));
             account.setAccountName(trimToNull(result.accountName()));
-            account.setProviderMessage(trimToNull(result.message()));
+            // Provider response text is intentionally not persisted verbatim: it may
+            // contain operational detail that should not become durable application data.
+            account.setProviderMessage("Provisioned");
             account.setStatus(CustomerFundingAccountStatus.ACTIVE);
             account.setActivatedAt(LocalDateTime.now());
             return fundingAccountRepository.save(account);
