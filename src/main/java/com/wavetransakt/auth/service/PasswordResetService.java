@@ -69,12 +69,15 @@ public class PasswordResetService {
 
     /**
      * Resets only the account-login PIN; the transaction PIN is not changed.
-     * Advancing authVersion atomically revokes all JWTs, login OTPs and face
-     * challenges issued before this credential change.
+     * The user row is locked before the epoch changes so concurrent revoke/reset
+     * operations serialize instead of losing an auth-version increment.
      */
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
-        User user = findUserOptional(request.getIdentifier())
+        User identifiedUser = findUserOptional(request.getIdentifier())
+                .orElseThrow(() -> new IllegalArgumentException("Invalid or expired recovery code"));
+
+        User user = userRepository.findByIdForUpdate(identifiedUser.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid or expired recovery code"));
 
         PasswordResetToken token = passwordResetTokenRepository
