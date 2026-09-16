@@ -74,4 +74,56 @@ class RateLimitGuardTest {
                 window
         ));
     }
+
+    @Test
+    void blockedStatusThrowsWithoutConsumingAnotherAttempt() {
+        Duration window = Duration.ofMinutes(10);
+        when(rateLimitService.status("TRANSACTION_PIN_FAILURE", "USER:123", 5, window))
+                .thenReturn(new DistributedRateLimitService.RateLimitStatus(
+                        true,
+                        5,
+                        5,
+                        0,
+                        90,
+                        Instant.now().plusSeconds(90)
+                ));
+
+        RateLimitGuard guard = new RateLimitGuard(rateLimitService);
+
+        RateLimitExceededException exception = assertThrows(
+                RateLimitExceededException.class,
+                () -> guard.requireNotBlocked(
+                        "TRANSACTION_PIN_FAILURE",
+                        "USER:123",
+                        5,
+                        window
+                )
+        );
+
+        assertEquals(90, exception.getRetryAfterSeconds());
+        verify(rateLimitService, never()).consume(anyString(), anyString(), anyInt(), any());
+    }
+
+    @Test
+    void unblockedStatusReturnsNormally() {
+        Duration window = Duration.ofMinutes(10);
+        when(rateLimitService.status("TRANSACTION_PIN_FAILURE", "USER:123", 5, window))
+                .thenReturn(new DistributedRateLimitService.RateLimitStatus(
+                        false,
+                        5,
+                        3,
+                        2,
+                        0,
+                        Instant.now().plusSeconds(300)
+                ));
+
+        RateLimitGuard guard = new RateLimitGuard(rateLimitService);
+
+        assertDoesNotThrow(() -> guard.requireNotBlocked(
+                "TRANSACTION_PIN_FAILURE",
+                "USER:123",
+                5,
+                window
+        ));
+    }
 }

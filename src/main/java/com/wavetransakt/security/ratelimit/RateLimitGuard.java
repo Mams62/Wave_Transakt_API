@@ -28,6 +28,24 @@ public class RateLimitGuard {
         }
     }
 
+    /**
+     * Enforces a previously accumulated failure lock without incrementing the
+     * distributed bucket. Use this before failure-only authorization checks.
+     */
+    public void requireNotBlocked(
+            String policyCode,
+            String subject,
+            int limit,
+            Duration window
+    ) {
+        DistributedRateLimitService.RateLimitStatus status =
+                rateLimitService.status(policyCode, subject, limit, window);
+
+        if (status.blocked()) {
+            throw new RateLimitExceededException(status.retryAfterSeconds());
+        }
+    }
+
     public String canonicalIdentifier(String identifier) {
         if (identifier == null || identifier.isBlank()) {
             return "MISSING";

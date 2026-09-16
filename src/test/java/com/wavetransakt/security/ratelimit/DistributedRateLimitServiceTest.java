@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.Duration;
@@ -68,6 +69,61 @@ class DistributedRateLimitServiceTest {
     }
 
     @Test
+    void statusAtFailureThresholdIsBlockedWithoutIncrementingBucket() {
+        when(jdbcTemplate.queryForObject(
+                anyString(),
+                eq(Integer.class),
+                any(), any(), any()
+        )).thenReturn(5);
+
+        DistributedRateLimitService service =
+                new DistributedRateLimitService(jdbcTemplate);
+
+        DistributedRateLimitService.RateLimitStatus status = service.status(
+                "TRANSACTION_PIN_FAILURE",
+                "USER:123",
+                5,
+                Duration.ofMinutes(10)
+        );
+
+        assertTrue(status.blocked());
+        assertEquals(5, status.count());
+        assertEquals(0, status.remaining());
+        assertTrue(status.retryAfterSeconds() > 0);
+        assertTrue(status.retryAfterSeconds() <= Duration.ofMinutes(10).toSeconds());
+        verify(jdbcTemplate).queryForObject(
+                anyString(),
+                eq(Integer.class),
+                any(), any(), any()
+        );
+        verifyNoMoreInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void statusWithoutExistingBucketIsNotBlocked() {
+        when(jdbcTemplate.queryForObject(
+                anyString(),
+                eq(Integer.class),
+                any(), any(), any()
+        )).thenThrow(new EmptyResultDataAccessException(1));
+
+        DistributedRateLimitService service =
+                new DistributedRateLimitService(jdbcTemplate);
+
+        DistributedRateLimitService.RateLimitStatus status = service.status(
+                "TRANSACTION_PIN_FAILURE",
+                "USER:123",
+                5,
+                Duration.ofMinutes(10)
+        );
+
+        assertFalse(status.blocked());
+        assertEquals(0, status.count());
+        assertEquals(5, status.remaining());
+        assertEquals(0, status.retryAfterSeconds());
+    }
+
+    @Test
     void subjectHashIsDeterministicPolicyScopedAndDoesNotExposeRawSubject() {
         DistributedRateLimitService service =
                 new DistributedRateLimitService(jdbcTemplate);
@@ -96,6 +152,10 @@ class DistributedRateLimitServiceTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> service.consume("AUTH_LOGIN", "subject", 5, Duration.ZERO)
+        );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.status("AUTH_LOGIN", "subject", 0, Duration.ofMinutes(1))
         );
 
         verifyNoInteractions(jdbcTemplate);

@@ -1,10 +1,12 @@
 package com.wavetransakt.security;
 
+import com.wavetransakt.security.ratelimit.RateLimitExceededException;
 import com.wavetransakt.security.ratelimit.RateLimitGuard;
 import com.wavetransakt.user.entity.User;
 import com.wavetransakt.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -15,6 +17,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -25,7 +28,7 @@ class TransactionPinGuardTest {
     @Mock RateLimitGuard rateLimitGuard;
 
     @Test
-    void correctPinDoesNotConsumeFailureBudget() {
+    void correctPinChecksLockButDoesNotConsumeFailureBudget() {
         UUID userId = UUID.randomUUID();
         User user = user(userId, "pin-hash");
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
@@ -35,7 +38,15 @@ class TransactionPinGuardTest {
         User result = guard.verify(userId, "123456");
 
         assertEquals(user, result);
-        verifyNoInteractions(rateLimitGuard);
+        verify(rateLimitGuard, times(2)).requireNotBlocked(
+                "TRANSACTION_PIN_FAILURE",
+                "USER:" + userId,
+                5,
+                Duration.ofMinutes(10)
+        );
+        verify(rateLimitGuard, never()).requireAllowed(
+                anyString(), anyString(), anyInt(), any(Duration.class)
+        );
     }
 
     @Test
@@ -51,7 +62,15 @@ class TransactionPinGuardTest {
         );
 
         assertEquals("Invalid transaction PIN", error.getMessage());
-        verify(rateLimitGuard).requireAllowed(
+        InOrder order = inOrder(rateLimitGuard, passwordEncoder);
+        order.verify(rateLimitGuard).requireNotBlocked(
+                "TRANSACTION_PIN_FAILURE",
+                "USER:" + userId,
+                5,
+                Duration.ofMinutes(10)
+        );
+        order.verify(passwordEncoder).matches("654321", "pin-hash");
+        order.verify(rateLimitGuard).requireAllowed(
                 "TRANSACTION_PIN_FAILURE",
                 "USER:" + userId,
                 5,
@@ -71,11 +90,42 @@ class TransactionPinGuardTest {
         );
 
         verify(passwordEncoder, never()).matches(anyString(), anyString());
+        verify(rateLimitGuard).requireNotBlocked(
+                "TRANSACTION_PIN_FAILURE",
+                "USER:" + userId,
+                5,
+                Duration.ofMinutes(10)
+        );
         verify(rateLimitGuard).requireAllowed(
                 "TRANSACTION_PIN_FAILURE",
                 "USER:" + userId,
                 5,
                 Duration.ofMinutes(10)
+        );
+    }
+
+    @Test
+    void activeFailureLockBlocksEvenCorrectPinBeforeHashCheck() {
+        UUID userId = UUID.randomUUID();
+        User user = user(userId, "pin-hash");
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        doThrow(new RateLimitExceededException(120))
+                .when(rateLimitGuard).requireNotBlocked(
+                        "TRANSACTION_PIN_FAILURE",
+                        "USER:" + userId,
+                        5,
+                        Duration.ofMinutes(10)
+                );
+
+        RateLimitExceededException error = assertThrows(
+                RateLimitExceededException.class,
+                () -> guard().verify(userId, "123456")
+        );
+
+        assertEquals(120, error.getRetryAfterSeconds());
+        verifyNoInteractions(passwordEncoder);
+        verify(rateLimitGuard, never()).requireAllowed(
+                anyString(), anyString(), anyInt(), any(Duration.class)
         );
     }
 
@@ -95,6 +145,12 @@ class TransactionPinGuardTest {
                 eq(Duration.ofMinutes(10))
         );
         verify(rateLimitGuard, never()).requireAllowed(
+                anyString(),
+                eq("999999"),
+                anyInt(),
+                any(Duration.class)
+        );
+        verify(rateLimitGuard, never()).requireNotBlocked(
                 anyString(),
                 eq("999999"),
                 anyInt(),
