@@ -24,6 +24,7 @@ on:
       - feat/provider-neutral-funding-events-20260916
       - feat/funding-credit-policy-reconciliation-20260916
       - fix/render-docker-entrypoint-20260916
+      - feat/funding-reconciliation-operations-20260916
   pull_request:
     branches:
       - controlled-start-api-20260910
@@ -52,7 +53,7 @@ jobs:
         run: mvn -B -DskipTests package
 
       - name: Run financial, merchant, card and transfer safety unit tests
-        run: mvn -B -Dtest=ServicePaymentServiceTest,VtpassVerificationClientTest,VtpassSmileClientTest,SmilePaymentServiceTest,ServiceFulfillmentCryptoTest,WaecPaymentServiceTest,VtpassWaecPurchaseClientTest,JambPaymentServiceTest,VtpassJambPurchaseClientTest,InterswitchBankTransferGatewayTest,ExternalBankTransferOrchestratorTest,CustomerFundingAccountServiceTest,CustomerFundingEventServiceTest,CustomerFundingCreditServiceTest,ProviderFundingLedgerServiceTest,MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,InterswitchCardIssuingGatewayTest,WaveCardServiceTest,PosClientServiceTest,PosTerminalSessionServiceTest,ProviderTerminalLinkServiceTest,ProviderEventIngressServiceTest,TerminalProvisioningServiceTest test
+        run: mvn -B -Dtest=ServicePaymentServiceTest,VtpassVerificationClientTest,VtpassSmileClientTest,SmilePaymentServiceTest,ServiceFulfillmentCryptoTest,WaecPaymentServiceTest,VtpassWaecPurchaseClientTest,JambPaymentServiceTest,VtpassJambPurchaseClientTest,InterswitchBankTransferGatewayTest,ExternalBankTransferOrchestratorTest,CustomerFundingAccountServiceTest,CustomerFundingEventServiceTest,CustomerFundingCreditServiceTest,CustomerFundingOperationsServiceTest,ProviderFundingLedgerServiceTest,MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,InterswitchCardIssuingGatewayTest,WaveCardServiceTest,PosClientServiceTest,PosTerminalSessionServiceTest,ProviderTerminalLinkServiceTest,ProviderEventIngressServiceTest,TerminalProvisioningServiceTest test
 
       - name: Build Render Docker image
         run: docker build -t wave-transakt-api-ci .
