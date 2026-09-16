@@ -74,11 +74,8 @@ public class CustomerFundingAccountService {
 
         CustomerFundingAccountProvider.ProvisioningReadiness readiness = provider.readiness();
         if (readiness == null || !readiness.ready()) {
-            throw new IllegalStateException(
-                    readiness == null || readiness.message() == null || readiness.message().isBlank()
-                            ? "Funding account provider is not ready"
-                            : readiness.message()
-            );
+            // Do not echo provider/internal configuration detail to the client.
+            throw new IllegalStateException("Funding account provider is not ready");
         }
 
         CustomerFundingAccount account = existing != null
