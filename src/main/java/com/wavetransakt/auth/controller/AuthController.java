@@ -5,6 +5,7 @@ import com.wavetransakt.auth.dto.LoginOtpRequest;
 import com.wavetransakt.auth.entity.FaceLoginChallenge;
 import com.wavetransakt.auth.service.AuthService;
 import com.wavetransakt.auth.service.FaceLoginChallengeService;
+import com.wavetransakt.auth.service.SessionRevocationService;
 import com.wavetransakt.identity.dto.LivenessCaptureResponse;
 import com.wavetransakt.identity.dto.LivenessSessionResponse;
 import com.wavetransakt.identity.service.LivenessService;
@@ -19,9 +20,11 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -34,6 +37,7 @@ public class AuthController {
     private final FaceLoginChallengeService faceLoginChallengeService;
     private final LivenessService livenessService;
     private final RateLimitGuard rateLimitGuard;
+    private final SessionRevocationService sessionRevocationService;
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
@@ -98,6 +102,31 @@ public class AuthController {
                         .faceVerificationRequired(false)
                         .build()
         );
+    }
+
+    /**
+     * Advances the authenticated user's server-side auth epoch. Every JWT,
+     * login OTP and face-login challenge from the previous epoch is rejected
+     * immediately after the transaction commits.
+     */
+    @PostMapping("/sessions/revoke-all")
+    public ResponseEntity<?> revokeAllSessions(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(401).body("Authentication required");
+        }
+
+        Object principal = authentication.getPrincipal();
+        if (!(principal instanceof User user)) {
+            return ResponseEntity.status(401).body("Invalid authentication");
+        }
+
+        sessionRevocationService.revokeAll(user.getId());
+        SecurityContextHolder.clearContext();
+
+        return ResponseEntity.ok(Map.of(
+                "message",
+                "All sessions were revoked successfully. Please sign in again."
+        ));
     }
 
     @GetMapping("/me")
