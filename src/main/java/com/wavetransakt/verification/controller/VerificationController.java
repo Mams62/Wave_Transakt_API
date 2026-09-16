@@ -1,11 +1,13 @@
 package com.wavetransakt.verification.controller;
 
+import com.wavetransakt.security.ratelimit.RateLimitGuard;
 import com.wavetransakt.verification.service.VerificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Duration;
 import java.util.Locale;
 
 @RestController
@@ -14,6 +16,7 @@ import java.util.Locale;
 public class VerificationController {
 
     private final VerificationService verificationService;
+    private final RateLimitGuard rateLimitGuard;
 
     @Value("${wave.demo.return-verification-code:false}")
     private boolean returnVerificationCode;
@@ -22,6 +25,13 @@ public class VerificationController {
     public ResponseEntity<?> verifyEmail(
             @RequestBody EmailVerificationRequest request
     ) {
+        rateLimitGuard.requireAllowed(
+                "EMAIL_VERIFY_IDENTIFIER",
+                rateLimitGuard.canonicalIdentifier(request.getEmail()),
+                10,
+                Duration.ofMinutes(10)
+        );
+
         verificationService.verifyEmail(
                 request.getEmail(),
                 request.getCode()
@@ -47,6 +57,13 @@ public class VerificationController {
         String email = request.getEmail() == null
                 ? ""
                 : request.getEmail().trim().toLowerCase(Locale.ROOT);
+
+        rateLimitGuard.requireAllowed(
+                "EMAIL_RESEND_IDENTIFIER",
+                rateLimitGuard.canonicalIdentifier(email),
+                4,
+                Duration.ofMinutes(15)
+        );
 
         String code = verificationService.resendEmailVerification(email);
 
