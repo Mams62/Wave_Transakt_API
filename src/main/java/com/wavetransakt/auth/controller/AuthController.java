@@ -8,6 +8,7 @@ import com.wavetransakt.auth.service.FaceLoginChallengeService;
 import com.wavetransakt.identity.dto.LivenessCaptureResponse;
 import com.wavetransakt.identity.dto.LivenessSessionResponse;
 import com.wavetransakt.identity.service.LivenessService;
+import com.wavetransakt.security.ratelimit.RateLimitGuard;
 import com.wavetransakt.user.dto.LoginRequest;
 import com.wavetransakt.user.dto.RegisterRequest;
 import com.wavetransakt.user.dto.UserProfileResponse;
@@ -20,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Duration;
 import java.util.UUID;
 
 @RestController
@@ -31,6 +33,7 @@ public class AuthController {
     private final WalletRepository walletRepository;
     private final FaceLoginChallengeService faceLoginChallengeService;
     private final LivenessService livenessService;
+    private final RateLimitGuard rateLimitGuard;
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
@@ -40,12 +43,24 @@ public class AuthController {
     /** Starts credential login. No JWT is issued yet. */
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+        rateLimitGuard.requireAllowed(
+                "AUTH_LOGIN_IDENTIFIER",
+                rateLimitGuard.canonicalIdentifier(request.getIdentifier()),
+                8,
+                Duration.ofMinutes(10)
+        );
         return ResponseEntity.ok(authService.login(request));
     }
 
     /** Verifies registered-phone OTP and returns only a short-lived face challenge. */
     @PostMapping("/login/otp")
     public ResponseEntity<AuthResponse> verifyLoginOtp(@Valid @RequestBody LoginOtpRequest request) {
+        rateLimitGuard.requireAllowed(
+                "AUTH_OTP_IDENTIFIER",
+                rateLimitGuard.canonicalIdentifier(request.getIdentifier()),
+                8,
+                Duration.ofMinutes(10)
+        );
         return ResponseEntity.ok(authService.verifyLoginOtp(request));
     }
 
