@@ -30,6 +30,7 @@ on:
       - feat/hashed-verification-codes-20260916
       - fix/auth-challenge-replay-20260916
       - fix/transaction-pin-authorization-20260916
+      - fix/transaction-pin-lockout-20260916
   pull_request:
     branches:
       - controlled-start-api-20260910
