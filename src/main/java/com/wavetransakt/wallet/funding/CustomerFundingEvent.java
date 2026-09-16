@@ -46,6 +46,21 @@ public class CustomerFundingEvent {
     @Column(length = 3)
     private String currency;
 
+    @Column(name = "credit_policy_code", length = 80)
+    private String creditPolicyCode;
+
+    @Column(name = "credit_decision", length = 40)
+    private String creditDecision;
+
+    @Column(name = "credit_decision_reason", length = 255)
+    private String creditDecisionReason;
+
+    @Column(name = "credit_decided_at")
+    private LocalDateTime creditDecidedAt;
+
+    @Column(name = "ledger_reference", length = 100)
+    private String ledgerReference;
+
     @Column(name = "received_at", nullable = false)
     @Builder.Default
     private LocalDateTime receivedAt = LocalDateTime.now();

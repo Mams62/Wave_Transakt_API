@@ -22,6 +22,7 @@ on:
       - feat/external-bank-transfer-orchestration-20260914
       - feat/provider-neutral-account-funding-20260916
       - feat/provider-neutral-funding-events-20260916
+      - feat/funding-credit-policy-reconciliation-20260916
   pull_request:
     branches:
       - controlled-start-api-20260910
@@ -50,4 +51,4 @@ jobs:
         run: mvn -B -DskipTests package
 
       - name: Run financial, merchant, card and transfer safety unit tests
-        run: mvn -B -Dtest=ServicePaymentServiceTest,VtpassVerificationClientTest,VtpassSmileClientTest,SmilePaymentServiceTest,ServiceFulfillmentCryptoTest,WaecPaymentServiceTest,VtpassWaecPurchaseClientTest,JambPaymentServiceTest,VtpassJambPurchaseClientTest,InterswitchBankTransferGatewayTest,ExternalBankTransferOrchestratorTest,CustomerFundingAccountServiceTest,CustomerFundingEventServiceTest,MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,InterswitchCardIssuingGatewayTest,WaveCardServiceTest,PosClientServiceTest,PosTerminalSessionServiceTest,ProviderTerminalLinkServiceTest,ProviderEventIngressServiceTest,TerminalProvisioningServiceTest test
+        run: mvn -B -Dtest=ServicePaymentServiceTest,VtpassVerificationClientTest,VtpassSmileClientTest,SmilePaymentServiceTest,ServiceFulfillmentCryptoTest,WaecPaymentServiceTest,VtpassWaecPurchaseClientTest,JambPaymentServiceTest,VtpassJambPurchaseClientTest,InterswitchBankTransferGatewayTest,ExternalBankTransferOrchestratorTest,CustomerFundingAccountServiceTest,CustomerFundingEventServiceTest,CustomerFundingCreditServiceTest,ProviderFundingLedgerServiceTest,MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,InterswitchCardIssuingGatewayTest,WaveCardServiceTest,PosClientServiceTest,PosTerminalSessionServiceTest,ProviderTerminalLinkServiceTest,ProviderEventIngressServiceTest,TerminalProvisioningServiceTest test
