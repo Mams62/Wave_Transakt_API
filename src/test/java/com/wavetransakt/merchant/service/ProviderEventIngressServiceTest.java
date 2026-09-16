@@ -6,20 +6,24 @@ import com.wavetransakt.merchant.repository.MerchantProviderEventRepository;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class ProviderEventIngressServiceTest {
 
     @Test
-    void verifiedEventIsAcceptedAndOnlyPayloadHashIsPersisted() {
+    void verifiedEventIsAcceptedAndAtomicallyReservedByTrustedEventId() {
         MerchantAcquiringGateway gateway = mock(MerchantAcquiringGateway.class);
         MerchantProviderEventRepository repo = mock(MerchantProviderEventRepository.class);
+        Map<String, MerchantProviderEvent> store = wireAtomicStore(repo);
         when(gateway.code()).thenReturn("INTERSWITCH");
 
         byte[] raw = "provider-payload".getBytes(StandardCharsets.UTF_8);
@@ -29,17 +33,8 @@ class ProviderEventIngressServiceTest {
                 );
 
         when(gateway.verifyProviderEvent(command)).thenReturn(
-                new MerchantAcquiringGateway.ProviderEventVerificationResult(
-                        "INTERSWITCH", true, "evt-001", "TERMINAL.LINKED",
-                        "VERIFIED", "signature valid"
-                )
+                verified("evt-001", "TERMINAL.LINKED")
         );
-        when(repo.findByEventKey("INTERSWITCH:evt-001")).thenReturn(Optional.empty());
-        when(repo.save(any(MerchantProviderEvent.class))).thenAnswer(invocation -> {
-            MerchantProviderEvent event = invocation.getArgument(0);
-            event.setId(UUID.randomUUID());
-            return event;
-        });
 
         ProviderEventIngressService service = new ProviderEventIngressService(List.of(gateway), repo);
         ProviderEventIngressService.IngressResult result = service.ingest("interswitch", command);
@@ -49,18 +44,20 @@ class ProviderEventIngressServiceTest {
         assertEquals("VERIFIED_PENDING_HANDLER", result.processingStatus());
         assertFalse(result.duplicate());
 
-        var captor = org.mockito.ArgumentCaptor.forClass(MerchantProviderEvent.class);
-        verify(repo).save(captor.capture());
-        MerchantProviderEvent stored = captor.getValue();
+        MerchantProviderEvent stored = store.get("INTERSWITCH:evt-001");
+        assertNotNull(stored);
         assertEquals(64, stored.getPayloadHash().length());
         assertNotEquals(new String(raw, StandardCharsets.UTF_8), stored.getPayloadHash());
         assertNull(stored.getProcessedAt());
+        verify(gateway).verifyProviderEvent(command);
+        verify(repo, never()).save(any());
     }
 
     @Test
-    void unverifiedEventIsRejectedAndMarkedProcessed() {
+    void unverifiedEventUsesSeparateHashedAuditKeyAndCannotClaimTrustedReplayKey() {
         MerchantAcquiringGateway gateway = mock(MerchantAcquiringGateway.class);
         MerchantProviderEventRepository repo = mock(MerchantProviderEventRepository.class);
+        Map<String, MerchantProviderEvent> store = wireAtomicStore(repo);
         when(gateway.code()).thenReturn("INTERSWITCH");
 
         MerchantAcquiringGateway.ProviderEventVerificationCommand command =
@@ -73,8 +70,6 @@ class ProviderEventIngressServiceTest {
                         "REJECTED", "signature invalid"
                 )
         );
-        when(repo.findByEventKey("INTERSWITCH:evt-002")).thenReturn(Optional.empty());
-        when(repo.save(any(MerchantProviderEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ProviderEventIngressService service = new ProviderEventIngressService(List.of(gateway), repo);
         ProviderEventIngressService.IngressResult result = service.ingest("INTERSWITCH", command);
@@ -82,47 +77,100 @@ class ProviderEventIngressServiceTest {
         assertEquals("REJECTED", result.status());
         assertEquals("REJECTED", result.verificationStatus());
         assertEquals("REJECTED", result.processingStatus());
+        assertFalse(store.containsKey("INTERSWITCH:evt-002"));
 
-        var captor = org.mockito.ArgumentCaptor.forClass(MerchantProviderEvent.class);
-        verify(repo).save(captor.capture());
-        assertNotNull(captor.getValue().getProcessedAt());
+        MerchantProviderEvent rejected = store.entrySet().stream()
+                .filter(entry -> entry.getKey().startsWith("INTERSWITCH:REJECTED:"))
+                .map(Map.Entry::getValue)
+                .findFirst()
+                .orElseThrow();
+        assertNotNull(rejected.getProcessedAt());
+        assertEquals("evt-002", rejected.getProviderReference());
     }
 
     @Test
-    void duplicateEventDoesNotInvokeProviderVerificationAgain() {
+    void duplicateVerifiedEventIsReverifiedThenReturnsExistingReservation() {
         MerchantAcquiringGateway gateway = mock(MerchantAcquiringGateway.class);
         MerchantProviderEventRepository repo = mock(MerchantProviderEventRepository.class);
+        wireAtomicStore(repo);
         when(gateway.code()).thenReturn("INTERSWITCH");
-
-        MerchantProviderEvent existing = MerchantProviderEvent.builder()
-                .id(UUID.randomUUID())
-                .providerCode("INTERSWITCH")
-                .eventKey("INTERSWITCH:evt-003")
-                .eventType("TERMINAL.LINKED")
-                .payloadHash("a".repeat(64))
-                .verificationStatus("VERIFIED")
-                .processingStatus("VERIFIED_PENDING_HANDLER")
-                .build();
-        when(repo.findByEventKey("INTERSWITCH:evt-003")).thenReturn(Optional.of(existing));
 
         MerchantAcquiringGateway.ProviderEventVerificationCommand command =
                 new MerchantAcquiringGateway.ProviderEventVerificationCommand(
                         "evt-003", "TERMINAL.LINKED", "sig", "ts", new byte[]{9}
                 );
+        when(gateway.verifyProviderEvent(command)).thenReturn(
+                verified("evt-003", "TERMINAL.LINKED")
+        );
 
         ProviderEventIngressService service = new ProviderEventIngressService(List.of(gateway), repo);
-        ProviderEventIngressService.IngressResult result = service.ingest("INTERSWITCH", command);
+        ProviderEventIngressService.IngressResult first = service.ingest("INTERSWITCH", command);
+        ProviderEventIngressService.IngressResult second = service.ingest("INTERSWITCH", command);
 
-        assertTrue(result.duplicate());
-        assertEquals("DUPLICATE", result.status());
-        verify(gateway, never()).verifyProviderEvent(any());
-        verify(repo, never()).save(any());
+        assertFalse(first.duplicate());
+        assertTrue(second.duplicate());
+        assertEquals("DUPLICATE", second.status());
+        assertEquals(first.eventRecordId(), second.eventRecordId());
+
+        /*
+         * Even duplicate claims are authenticated before the event ID is trusted.
+         * This prevents unauthenticated callers from probing/claiming event IDs.
+         */
+        verify(gateway, times(2)).verifyProviderEvent(command);
+        verify(repo, times(2)).insertIfAbsent(
+                eq("INTERSWITCH"),
+                eq("INTERSWITCH:evt-003"),
+                eq("TERMINAL.LINKED"),
+                eq("evt-003"),
+                anyString(),
+                eq("VERIFIED"),
+                eq("VERIFIED_PENDING_HANDLER"),
+                isNull()
+        );
     }
 
     @Test
-    void mismatchedVerifiedIdentityIsRejected() {
+    void forgedRejectedAttemptCannotPoisonLaterGenuineEventWithSameId() {
         MerchantAcquiringGateway gateway = mock(MerchantAcquiringGateway.class);
         MerchantProviderEventRepository repo = mock(MerchantProviderEventRepository.class);
+        Map<String, MerchantProviderEvent> store = wireAtomicStore(repo);
+        when(gateway.code()).thenReturn("INTERSWITCH");
+
+        MerchantAcquiringGateway.ProviderEventVerificationCommand forged =
+                new MerchantAcquiringGateway.ProviderEventVerificationCommand(
+                        "evt-real-001", "PAYMENT.SETTLED", "forged", "ts-1", new byte[]{4}
+                );
+        MerchantAcquiringGateway.ProviderEventVerificationCommand genuine =
+                new MerchantAcquiringGateway.ProviderEventVerificationCommand(
+                        "evt-real-001", "PAYMENT.SETTLED", "valid", "ts-2", new byte[]{5}
+                );
+
+        when(gateway.verifyProviderEvent(forged)).thenReturn(
+                new MerchantAcquiringGateway.ProviderEventVerificationResult(
+                        "INTERSWITCH", false, "evt-real-001", "PAYMENT.SETTLED",
+                        "REJECTED", "invalid signature"
+                )
+        );
+        when(gateway.verifyProviderEvent(genuine)).thenReturn(
+                verified("evt-real-001", "PAYMENT.SETTLED")
+        );
+
+        ProviderEventIngressService service = new ProviderEventIngressService(List.of(gateway), repo);
+        ProviderEventIngressService.IngressResult rejected = service.ingest("INTERSWITCH", forged);
+        ProviderEventIngressService.IngressResult accepted = service.ingest("INTERSWITCH", genuine);
+
+        assertEquals("REJECTED", rejected.status());
+        assertEquals("ACCEPTED", accepted.status());
+        assertFalse(accepted.duplicate());
+        assertTrue(store.containsKey("INTERSWITCH:evt-real-001"));
+        assertTrue(store.keySet().stream().anyMatch(key -> key.startsWith("INTERSWITCH:REJECTED:")));
+    }
+
+    @Test
+    void mismatchedVerifiedIdentityIsRejectedWithoutOccupyingTrustedEventKey() {
+        MerchantAcquiringGateway gateway = mock(MerchantAcquiringGateway.class);
+        MerchantProviderEventRepository repo = mock(MerchantProviderEventRepository.class);
+        Map<String, MerchantProviderEvent> store = wireAtomicStore(repo);
         when(gateway.code()).thenReturn("INTERSWITCH");
 
         MerchantAcquiringGateway.ProviderEventVerificationCommand command =
@@ -135,13 +183,69 @@ class ProviderEventIngressServiceTest {
                         "VERIFIED", "signature valid"
                 )
         );
-        when(repo.findByEventKey("INTERSWITCH:evt-004")).thenReturn(Optional.empty());
-        when(repo.save(any(MerchantProviderEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ProviderEventIngressService service = new ProviderEventIngressService(List.of(gateway), repo);
         ProviderEventIngressService.IngressResult result = service.ingest("INTERSWITCH", command);
 
         assertEquals("REJECTED", result.status());
         assertEquals("REJECTED", result.verificationStatus());
+        assertFalse(store.containsKey("INTERSWITCH:evt-004"));
+    }
+
+    private MerchantAcquiringGateway.ProviderEventVerificationResult verified(
+            String eventId,
+            String eventType
+    ) {
+        return new MerchantAcquiringGateway.ProviderEventVerificationResult(
+                "INTERSWITCH",
+                true,
+                eventId,
+                eventType,
+                "VERIFIED",
+                "signature valid"
+        );
+    }
+
+    private Map<String, MerchantProviderEvent> wireAtomicStore(
+            MerchantProviderEventRepository repo
+    ) {
+        Map<String, MerchantProviderEvent> store = new HashMap<>();
+
+        when(repo.insertIfAbsent(
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                nullable(LocalDateTime.class)
+        )).thenAnswer(invocation -> {
+            String eventKey = invocation.getArgument(1);
+            if (store.containsKey(eventKey)) {
+                return 0;
+            }
+
+            MerchantProviderEvent event = MerchantProviderEvent.builder()
+                    .id(UUID.randomUUID())
+                    .providerCode(invocation.getArgument(0))
+                    .eventKey(eventKey)
+                    .eventType(invocation.getArgument(2))
+                    .providerReference(invocation.getArgument(3))
+                    .payloadHash(invocation.getArgument(4))
+                    .verificationStatus(invocation.getArgument(5))
+                    .processingStatus(invocation.getArgument(6))
+                    .receivedAt(LocalDateTime.now())
+                    .processedAt(invocation.getArgument(7))
+                    .build();
+            store.put(eventKey, event);
+            return 1;
+        });
+
+        when(repo.findByEventKey(anyString())).thenAnswer(
+                invocation -> Optional.ofNullable(store.get(invocation.getArgument(0)))
+        );
+
+        return store;
     }
 }
