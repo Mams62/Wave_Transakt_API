@@ -1,6 +1,7 @@
 package com.wavetransakt.config;
 
 import com.wavetransakt.merchant.exception.PosSessionAuthenticationException;
+import com.wavetransakt.security.ratelimit.RateLimitExceededException;
 import com.wavetransakt.transaction.exception.IdempotencyConflictException;
 import com.wavetransakt.wallet.wema.WemaProviderException;
 import org.springframework.http.HttpStatus;
@@ -48,6 +49,21 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
+                .body(response);
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<?> handleRateLimitExceeded(
+            RateLimitExceededException ex
+    ) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("message", "Too many requests. Please try again later.");
+        response.put("error", "RATE_LIMITED");
+
+        return ResponseEntity
+                .status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", Long.toString(ex.getRetryAfterSeconds()))
+                .header("Cache-Control", "no-store")
                 .body(response);
     }
 
