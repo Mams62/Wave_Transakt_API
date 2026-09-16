@@ -6,6 +6,7 @@ import com.wavetransakt.user.repository.UserRepository;
 import com.wavetransakt.verification.entity.VerificationCode;
 import com.wavetransakt.verification.entity.VerificationType;
 import com.wavetransakt.verification.repository.VerificationCodeRepository;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -16,16 +17,33 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Locale;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class VerificationService {
+
+    private static final String DUMMY_VERIFICATION_CODE = "000000";
+    private static final String INVALID_CODE_MESSAGE =
+            "Invalid or expired verification code";
 
     private final VerificationCodeRepository verificationCodeRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
     private final SecureRandom secureRandom = new SecureRandom();
+
+    /*
+     * Used only to make unknown-account / no-code paths perform comparable
+     * password-hash work to a real hashed OTP check. It is never a valid Wave
+     * verification credential and is never persisted.
+     */
+    private volatile String dummyVerificationCodeHash;
+
+    @PostConstruct
+    void initializeDummyVerificationCodeHash() {
+        dummyVerificationCodeHash = passwordEncoder.encode(DUMMY_VERIFICATION_CODE);
+    }
 
     @Transactional
     public String createEmailVerificationCode(User user) {
@@ -37,21 +55,27 @@ public class VerificationService {
         return createCode(user, VerificationType.PHONE);
     }
 
+    /**
+     * Returns the same public outcome for an unknown account and for an account
+     * that is already verified. This prevents the resend endpoint from becoming
+     * an email-address enumeration oracle.
+     */
     @Transactional
     public String resendEmailVerification(String email) {
         if (email == null || email.isBlank()) {
             throw new IllegalArgumentException("Email is required");
         }
 
-        User user = userRepository
-                .findByEmail(email.trim().toLowerCase(Locale.ROOT))
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        Optional<User> userOptional = userRepository
+                .findByEmail(email.trim().toLowerCase(Locale.ROOT));
 
-        if (Boolean.TRUE.equals(user.getEmailVerified())) {
-            throw new IllegalArgumentException("Email is already verified");
+        if (userOptional.isEmpty()
+                || Boolean.TRUE.equals(userOptional.get().getEmailVerified())) {
+            consumeDummyVerificationWork(DUMMY_VERIFICATION_CODE);
+            return null;
         }
 
-        return createEmailVerificationCode(user);
+        return createEmailVerificationCode(userOptional.get());
     }
 
     @Transactional
@@ -59,11 +83,16 @@ public class VerificationService {
         if (email == null || email.isBlank()) {
             throw new IllegalArgumentException("Email is required");
         }
+        validateCandidateCode(code);
 
-        User user = userRepository
-                .findByEmail(email.trim().toLowerCase(Locale.ROOT))
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        Optional<User> userOptional = userRepository
+                .findByEmail(email.trim().toLowerCase(Locale.ROOT));
+        if (userOptional.isEmpty()) {
+            consumeDummyVerificationWork(code);
+            throw invalidCode();
+        }
 
+        User user = userOptional.get();
         verifyCode(user, VerificationType.EMAIL, code);
 
         user.setEmailVerified(true);
@@ -73,20 +102,29 @@ public class VerificationService {
 
     /**
      * Verifies a login OTP against the account identified by email or phone.
-     * A successful OTP does not by itself persist a trusted-device decision;
-     * the caller decides whether to issue a JWT after the challenge succeeds.
+     * Unknown identifiers intentionally produce the same public failure as a
+     * wrong/expired OTP and still perform password-hash work.
      */
     @Transactional
     public User verifyLoginPhoneCode(String identifier, String code) {
         if (identifier == null || identifier.isBlank()) {
             throw new IllegalArgumentException("Email or phone is required");
         }
+        validateCandidateCode(code);
 
         String raw = identifier.trim();
-        User user = userRepository.findByEmail(raw.toLowerCase(Locale.ROOT))
-                .orElseGet(() -> userRepository.findByPhone(raw)
-                        .orElseThrow(() -> new IllegalArgumentException("User not found")));
+        Optional<User> userOptional = userRepository
+                .findByEmail(raw.toLowerCase(Locale.ROOT));
+        if (userOptional.isEmpty()) {
+            userOptional = userRepository.findByPhone(raw);
+        }
 
+        if (userOptional.isEmpty()) {
+            consumeDummyVerificationWork(code);
+            throw invalidCode();
+        }
+
+        User user = userOptional.get();
         verifyCode(user, VerificationType.PHONE, code);
         return user;
     }
@@ -125,26 +163,26 @@ public class VerificationService {
     }
 
     private void verifyCode(User user, VerificationType type, String code) {
-        if (code == null || !code.matches("\\d{6}")) {
-            throw new IllegalArgumentException("Verification code must be exactly 6 digits");
+        validateCandidateCode(code);
+
+        Optional<VerificationCode> codeOptional = verificationCodeRepository
+                .findTopByUserAndTypeAndUsedFalseOrderByCreatedAtDesc(user, type);
+
+        if (codeOptional.isEmpty()) {
+            consumeDummyVerificationWork(code);
+            throw invalidCode();
         }
 
-        VerificationCode verificationCode = verificationCodeRepository
-                .findTopByUserAndTypeAndUsedFalseOrderByCreatedAtDesc(user, type)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "No active verification code. Please request a new code."
-                ));
-
+        VerificationCode verificationCode = codeOptional.get();
         if (verificationCode.getExpiresAt().isBefore(LocalDateTime.now())) {
+            consumeDummyVerificationWork(code);
             retire(verificationCode);
             verificationCodeRepository.save(verificationCode);
-            throw new IllegalArgumentException(
-                    "Verification code has expired. Please request a new code."
-            );
+            throw invalidCode();
         }
 
         if (!matches(verificationCode, code)) {
-            throw new IllegalArgumentException("Invalid verification code");
+            throw invalidCode();
         }
 
         retire(verificationCode);
@@ -159,13 +197,58 @@ public class VerificationService {
 
         String legacyCode = verificationCode.getCode();
         if (legacyCode == null || legacyCode.isBlank()) {
+            consumeDummyVerificationWork(candidate);
             return false;
         }
 
-        return MessageDigest.isEqual(
+        boolean legacyMatches = MessageDigest.isEqual(
                 legacyCode.getBytes(StandardCharsets.UTF_8),
                 candidate.getBytes(StandardCharsets.UTF_8)
         );
+
+        /*
+         * Legacy plaintext rows exist only for migration compatibility, but do
+         * comparable BCrypt work so their temporary presence does not create an
+         * obvious timing distinction from the hashed-code path.
+         */
+        consumeDummyVerificationWork(candidate);
+        return legacyMatches;
+    }
+
+    private void validateCandidateCode(String code) {
+        if (code == null || !code.matches("\\d{6}")) {
+            throw new IllegalArgumentException(
+                    "Verification code must be exactly 6 digits"
+            );
+        }
+    }
+
+    private void consumeDummyVerificationWork(String candidate) {
+        String hash = dummyVerificationCodeHash();
+        if (hash == null || hash.isBlank()) {
+            /* Unit-test/misconfigured-encoder fallback; production BCrypt does not return null. */
+            passwordEncoder.encode(candidate);
+            return;
+        }
+        passwordEncoder.matches(candidate, hash);
+    }
+
+    private String dummyVerificationCodeHash() {
+        String current = dummyVerificationCodeHash;
+        if (current != null && !current.isBlank()) {
+            return current;
+        }
+
+        synchronized (this) {
+            if (dummyVerificationCodeHash == null || dummyVerificationCodeHash.isBlank()) {
+                dummyVerificationCodeHash = passwordEncoder.encode(DUMMY_VERIFICATION_CODE);
+            }
+            return dummyVerificationCodeHash;
+        }
+    }
+
+    private IllegalArgumentException invalidCode() {
+        return new IllegalArgumentException(INVALID_CODE_MESSAGE);
     }
 
     private void retire(VerificationCode verificationCode) {
