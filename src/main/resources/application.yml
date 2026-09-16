@@ -110,6 +110,11 @@ wave:
   demo:
     return-verification-code: ${WAVE_RETURN_VERIFICATION_CODE:false}
 
+  security:
+    # Distributed PostgreSQL-backed abuse throttles. Keep enabled on staging and
+    # production; disabling is an explicit emergency-only operator action.
+    rate-limits-enabled: ${WAVE_RATE_LIMITS_ENABLED:true}
+
   app:
     android:
       latest-version-code: ${WAVE_ANDROID_LATEST_VERSION_CODE:1}
