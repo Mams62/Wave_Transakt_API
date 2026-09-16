@@ -92,6 +92,49 @@ class CustomerFundingEventServiceTest {
     }
 
     @Test
+    void conflictingAccountNumberAndProviderReferenceNeverRouteFundsToEitherWallet() {
+        CustomerFundingAccount byNumber = CustomerFundingAccount.builder()
+                .id(UUID.randomUUID())
+                .providerCode("PAYSTACK")
+                .accountNumber("0123456789")
+                .build();
+        CustomerFundingAccount byReference = CustomerFundingAccount.builder()
+                .id(UUID.randomUUID())
+                .providerCode("PAYSTACK")
+                .providerAccountReference("dva-ref-2")
+                .build();
+
+        when(eventRepository.findByProviderCodeAndProviderEventId("PAYSTACK", "evt-conflict"))
+                .thenReturn(Optional.empty());
+        when(fundingAccountRepository.findByProviderCodeAndAccountNumber("PAYSTACK", "0123456789"))
+                .thenReturn(Optional.of(byNumber));
+        when(fundingAccountRepository.findByProviderCodeAndProviderAccountReference("PAYSTACK", "dva-ref-2"))
+                .thenReturn(Optional.of(byReference));
+        when(eventRepository.saveAndFlush(any(CustomerFundingEvent.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        CustomerFundingEventService service = new CustomerFundingEventService(
+                eventRepository,
+                fundingAccountRepository
+        );
+
+        CustomerFundingEvent event = service.recordReceived(
+                new CustomerFundingEventService.ReceivedFundingNotice(
+                        "PAYSTACK",
+                        "evt-conflict",
+                        "provider-txn-conflict",
+                        "dva-ref-2",
+                        "0123456789",
+                        new BigDecimal("750.00"),
+                        "NGN"
+                )
+        );
+
+        assertEquals(CustomerFundingEventStatus.RECONCILIATION_REQUIRED, event.getStatus());
+        assertNull(event.getFundingAccount());
+    }
+
+    @Test
     void duplicateProviderEventReturnsExistingRecordBeforeAccountResolution() {
         CustomerFundingEvent existing = CustomerFundingEvent.builder()
                 .id(UUID.randomUUID())
