@@ -1,5 +1,6 @@
 package com.wavetransakt.security.ratelimit;
 
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -49,6 +50,14 @@ public class DistributedRateLimitService {
             RETURNING request_count
             """;
 
+    private static final String STATUS_SQL = """
+            SELECT request_count
+            FROM api_rate_limit_buckets
+            WHERE policy_code = ?
+              AND subject_hash = ?
+              AND window_started_at = ?
+            """;
+
     private final JdbcTemplate jdbcTemplate;
 
     public DistributedRateLimitService(JdbcTemplate jdbcTemplate) {
@@ -66,48 +75,81 @@ public class DistributedRateLimitService {
             int limit,
             Duration window
     ) {
-        String policyCode = normalizePolicyCode(rawPolicyCode);
-        String subject = normalizeSubject(rawSubject);
-        long windowSeconds = validateWindow(window);
-        validateLimit(limit);
-
-        Instant now = Instant.now();
-        long currentEpochSecond = now.getEpochSecond();
-        long windowStartEpoch = (currentEpochSecond / windowSeconds) * windowSeconds;
-        long resetEpoch = windowStartEpoch + windowSeconds;
-
-        Instant windowStart = Instant.ofEpochSecond(windowStartEpoch);
-        Instant resetAt = Instant.ofEpochSecond(resetEpoch);
-        String subjectHash = hashSubject(policyCode, subject);
+        WindowContext context = windowContext(rawPolicyCode, rawSubject, limit, window);
 
         Integer count = jdbcTemplate.queryForObject(
                 CONSUME_SQL,
                 Integer.class,
-                policyCode,
-                subjectHash,
-                Timestamp.from(windowStart),
-                Timestamp.from(resetAt),
-                Timestamp.from(now)
+                context.policyCode(),
+                context.subjectHash(),
+                Timestamp.from(context.windowStart()),
+                Timestamp.from(context.resetAt()),
+                Timestamp.from(context.now())
         );
 
         if (count == null || count < 1) {
             throw new IllegalStateException("Rate-limit counter update failed");
         }
 
-        opportunisticCleanup(now);
+        opportunisticCleanup(context.now());
 
         boolean allowed = count <= limit;
         int remaining = Math.max(0, limit - count);
         long retryAfterSeconds = allowed
                 ? 0L
-                : Math.max(1L, resetEpoch - currentEpochSecond);
+                : retryAfterSeconds(context);
 
         return new RateLimitDecision(
                 allowed,
                 limit,
                 remaining,
                 retryAfterSeconds,
-                resetAt
+                context.resetAt()
+        );
+    }
+
+    /**
+     * Reads the current distributed bucket without incrementing it. This is
+     * intended for failure-only throttles where successful requests must not
+     * consume quota but a subject that already reached the failure threshold
+     * must remain locked until the fixed window resets.
+     */
+    @Transactional(readOnly = true)
+    public RateLimitStatus status(
+            String rawPolicyCode,
+            String rawSubject,
+            int limit,
+            Duration window
+    ) {
+        WindowContext context = windowContext(rawPolicyCode, rawSubject, limit, window);
+
+        int count;
+        try {
+            Integer stored = jdbcTemplate.queryForObject(
+                    STATUS_SQL,
+                    Integer.class,
+                    context.policyCode(),
+                    context.subjectHash(),
+                    Timestamp.from(context.windowStart())
+            );
+            count = stored == null ? 0 : Math.max(0, stored);
+        } catch (EmptyResultDataAccessException notStarted) {
+            count = 0;
+        }
+
+        boolean blocked = count >= limit;
+        int remaining = Math.max(0, limit - count);
+        long retryAfterSeconds = blocked
+                ? retryAfterSeconds(context)
+                : 0L;
+
+        return new RateLimitStatus(
+                blocked,
+                limit,
+                count,
+                remaining,
+                retryAfterSeconds,
+                context.resetAt()
         );
     }
 
@@ -122,6 +164,38 @@ public class DistributedRateLimitService {
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is unavailable", exception);
         }
+    }
+
+    private WindowContext windowContext(
+            String rawPolicyCode,
+            String rawSubject,
+            int limit,
+            Duration window
+    ) {
+        String policyCode = normalizePolicyCode(rawPolicyCode);
+        String subject = normalizeSubject(rawSubject);
+        long windowSeconds = validateWindow(window);
+        validateLimit(limit);
+
+        Instant now = Instant.now();
+        long currentEpochSecond = now.getEpochSecond();
+        long windowStartEpoch = (currentEpochSecond / windowSeconds) * windowSeconds;
+        long resetEpoch = windowStartEpoch + windowSeconds;
+
+        return new WindowContext(
+                policyCode,
+                hashSubject(policyCode, subject),
+                now,
+                Instant.ofEpochSecond(windowStartEpoch),
+                Instant.ofEpochSecond(resetEpoch)
+        );
+    }
+
+    private long retryAfterSeconds(WindowContext context) {
+        return Math.max(
+                1L,
+                context.resetAt().getEpochSecond() - context.now().getEpochSecond()
+        );
     }
 
     private String normalizePolicyCode(String raw) {
@@ -178,6 +252,25 @@ public class DistributedRateLimitService {
             int limit,
             int remaining,
             long retryAfterSeconds,
+            Instant resetAt
+    ) {
+    }
+
+    public record RateLimitStatus(
+            boolean blocked,
+            int limit,
+            int count,
+            int remaining,
+            long retryAfterSeconds,
+            Instant resetAt
+    ) {
+    }
+
+    private record WindowContext(
+            String policyCode,
+            String subjectHash,
+            Instant now,
+            Instant windowStart,
             Instant resetAt
     ) {
     }
