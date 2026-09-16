@@ -2,8 +2,8 @@ package com.wavetransakt.transaction.controller;
 
 import com.wavetransakt.transaction.dto.TransactionResponse;
 import com.wavetransakt.transaction.dto.TransferRequest;
+import com.wavetransakt.transaction.service.AuthorizedTransferService;
 import com.wavetransakt.transaction.service.TransactionHistoryService;
-import com.wavetransakt.transaction.service.TransactionService;
 import com.wavetransakt.user.entity.User;
 import com.wavetransakt.wallet.service.WemaSettlementGuard;
 import jakarta.validation.Valid;
@@ -19,7 +19,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class TransactionController {
 
-    private final TransactionService transactionService;
+    private final AuthorizedTransferService authorizedTransferService;
     private final TransactionHistoryService transactionHistoryService;
     private final WemaSettlementGuard settlementGuard;
 
@@ -68,7 +68,7 @@ public class TransactionController {
         }
 
         return ResponseEntity.ok(
-                transactionService.transfer(
+                authorizedTransferService.transfer(
                         user.getId(),
                         idempotencyKey,
                         request

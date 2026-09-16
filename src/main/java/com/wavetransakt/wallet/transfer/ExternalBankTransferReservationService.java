@@ -1,13 +1,11 @@
 package com.wavetransakt.wallet.transfer;
 
+import com.wavetransakt.security.TransactionPinGuard;
 import com.wavetransakt.transaction.exception.IdempotencyConflictException;
-import com.wavetransakt.user.entity.User;
-import com.wavetransakt.user.repository.UserRepository;
 import com.wavetransakt.wallet.entity.Wallet;
 import com.wavetransakt.wallet.entity.WalletStatus;
 import com.wavetransakt.wallet.repository.WalletRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,10 +30,9 @@ public class ExternalBankTransferReservationService {
     private static final DateTimeFormatter REFERENCE_TIME =
             DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
-    private final UserRepository userRepository;
     private final WalletRepository walletRepository;
     private final ExternalBankTransferRepository transferRepository;
-    private final PasswordEncoder passwordEncoder;
+    private final TransactionPinGuard transactionPinGuard;
     private final ExternalBankTransferLedgerService ledgerService;
 
     @Transactional
@@ -58,14 +55,12 @@ public class ExternalBankTransferReservationService {
         BigDecimal amount = normalizeAmount(request.amount());
         String narration = optionalText(request.narration(), 160);
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User account not found"));
-        if (user.getTransactionPinHash() == null || user.getTransactionPinHash().isBlank()) {
-            throw new IllegalArgumentException("Transaction PIN is not configured");
-        }
-        if (!passwordEncoder.matches(request.transactionPin(), user.getTransactionPinHash())) {
-            throw new IllegalArgumentException("Invalid transaction PIN");
-        }
+        /*
+         * Authorization is deliberately outside the request fingerprint. The
+         * PIN proves permission to execute the instruction; it is not part of
+         * the financial instruction and is never persisted on the transfer.
+         */
+        transactionPinGuard.verify(userId, request.transactionPin());
 
         Wallet walletCandidate = walletRepository.findByUserId(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Wallet not found"));

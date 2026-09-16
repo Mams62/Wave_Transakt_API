@@ -1,18 +1,16 @@
 package com.wavetransakt.serviceprovider.service;
 
+import com.wavetransakt.security.TransactionPinGuard;
 import com.wavetransakt.serviceprovider.entity.ServicePayment;
 import com.wavetransakt.serviceprovider.entity.ServicePaymentStatus;
 import com.wavetransakt.serviceprovider.repository.ServicePaymentRepository;
 import com.wavetransakt.serviceprovider.vtpass.VtpassPurchaseClient.ProviderOutcome;
 import com.wavetransakt.serviceprovider.vtpass.VtpassPurchaseClient.ProviderResult;
 import com.wavetransakt.transaction.exception.IdempotencyConflictException;
-import com.wavetransakt.user.entity.User;
-import com.wavetransakt.user.repository.UserRepository;
 import com.wavetransakt.wallet.entity.Wallet;
 import com.wavetransakt.wallet.entity.WalletStatus;
 import com.wavetransakt.wallet.repository.WalletRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,10 +39,9 @@ public class ServicePaymentReservationService {
     private static final DateTimeFormatter REFERENCE_TIME =
             DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
-    private final UserRepository userRepository;
     private final WalletRepository walletRepository;
     private final ServicePaymentRepository servicePaymentRepository;
-    private final PasswordEncoder passwordEncoder;
+    private final TransactionPinGuard transactionPinGuard;
     private final ServicePaymentLedgerService servicePaymentLedgerService;
     private final ServiceFulfillmentCrypto fulfillmentCrypto;
 
@@ -57,18 +54,18 @@ public class ServicePaymentReservationService {
         if (userId == null) {
             throw new IllegalArgumentException("Authenticated user is required");
         }
+        if (request == null) {
+            throw new IllegalArgumentException("Service payment request is required");
+        }
 
         String idempotencyKey = normalizeIdempotencyKey(rawIdempotencyKey);
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User account not found"));
 
-        if (user.getTransactionPinHash() == null || user.getTransactionPinHash().isBlank()) {
-            throw new IllegalArgumentException("Transaction PIN is not configured");
-        }
-
-        if (!passwordEncoder.matches(request.transactionPin(), user.getTransactionPinHash())) {
-            throw new IllegalArgumentException("Invalid transaction PIN");
-        }
+        /*
+         * Transaction PIN is authorization only. It is intentionally excluded
+         * from the service-payment fingerprint and never persisted on the
+         * payment record.
+         */
+        transactionPinGuard.verify(userId, request.transactionPin());
 
         Wallet walletCandidate = walletRepository.findByUserId(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Wallet not found"));

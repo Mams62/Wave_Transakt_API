@@ -1,32 +1,19 @@
 package com.wavetransakt.qr.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.*;
-
-import java.math.BigDecimal;
 
 @Getter
 @Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class QrTransferRequest {
+public class PaymentQrPayRequest {
 
-    @NotBlank(message = "Wallet number is required")
-    private String walletNumber;
-
-    @NotNull(message = "Amount is required")
-    @DecimalMin(
-            value = "1.00",
-            message = "Amount must be at least 1.00"
-    )
-    private BigDecimal amount;
-
-    private String description;
+    @NotBlank(message = "QR payload is required")
+    private String payload;
 
     @NotBlank(message = "Transaction PIN is required")
     @Pattern(regexp = "\\d{6}", message = "Transaction PIN must be exactly 6 digits")

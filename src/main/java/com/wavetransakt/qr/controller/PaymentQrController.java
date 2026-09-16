@@ -1,8 +1,10 @@
 package com.wavetransakt.qr.controller;
 
 import com.wavetransakt.qr.dto.CreatePaymentQrRequest;
+import com.wavetransakt.qr.dto.PaymentQrPayRequest;
 import com.wavetransakt.qr.dto.PaymentQrPayloadRequest;
 import com.wavetransakt.qr.dto.PaymentQrResponse;
+import com.wavetransakt.qr.service.AuthorizedPaymentQrService;
 import com.wavetransakt.qr.service.PaymentQrService;
 import com.wavetransakt.transaction.dto.TransactionResponse;
 import com.wavetransakt.user.entity.User;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 public class PaymentQrController {
 
     private final PaymentQrService paymentQrService;
+    private final AuthorizedPaymentQrService authorizedPaymentQrService;
     private final WemaSettlementGuard settlementGuard;
 
     /** Recipient can still create a one-time intent during controlled testing. */
@@ -50,8 +53,9 @@ public class PaymentQrController {
     }
 
     /**
-     * The legacy local ledger debit is paused until the same instruction is
-     * settled against the Wema wallet source of funds.
+     * The local ledger debit remains paused until the provider settlement model
+     * is formally connected. If enabled later, transaction-PIN authorization
+     * is still mandatory before this one-time QR can be consumed.
      */
     @PostMapping("/pay")
     public ResponseEntity<TransactionResponse> pay(
@@ -61,15 +65,16 @@ public class PaymentQrController {
                     required = false
             )
             String idempotencyKey,
-            @Valid @RequestBody PaymentQrPayloadRequest request
+            @Valid @RequestBody PaymentQrPayRequest request
     ) {
         settlementGuard.requireMoneyMovementEnabled();
         User user = requireUser(authentication);
         return ResponseEntity.ok(
-                paymentQrService.pay(
+                authorizedPaymentQrService.pay(
                         user.getId(),
                         idempotencyKey,
-                        request.getPayload()
+                        request.getPayload(),
+                        request.getTransactionPin()
                 )
         );
     }
