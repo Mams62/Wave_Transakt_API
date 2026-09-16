@@ -88,6 +88,16 @@ public class User {
     @Column(name = "transaction_pin_hash", length = 100)
     private String transactionPinHash;
 
+    /**
+     * Monotonic authentication epoch. Tokens and login artifacts are valid only
+     * while their embedded/snapshotted version equals this value. Sensitive
+     * credential changes advance the epoch to revoke pre-change sessions.
+     */
+    @JsonIgnore
+    @Column(name = "auth_version", nullable = false)
+    @Builder.Default
+    private long authVersion = 0L;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     @Builder.Default
@@ -137,6 +147,10 @@ public class User {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+
+    public void advanceAuthVersion() {
+        authVersion = Math.addExact(authVersion, 1L);
     }
 
     public boolean isEnabled() {
