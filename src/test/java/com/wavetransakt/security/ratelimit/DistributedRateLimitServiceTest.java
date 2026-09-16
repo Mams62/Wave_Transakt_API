@@ -91,7 +91,12 @@ class DistributedRateLimitServiceTest {
         assertEquals(0, status.remaining());
         assertTrue(status.retryAfterSeconds() > 0);
         assertTrue(status.retryAfterSeconds() <= Duration.ofMinutes(10).toSeconds());
-        verify(jdbcTemplate, never()).update(anyString(), any());
+        verify(jdbcTemplate).queryForObject(
+                anyString(),
+                eq(Integer.class),
+                any(), any(), any()
+        );
+        verifyNoMoreInteractions(jdbcTemplate);
     }
 
     @Test
