@@ -43,6 +43,16 @@ class PasswordResetAuthEpochTest {
     }
 
     @Test
+    void userEpochChangeUsesPessimisticWriteLock() throws Exception {
+        Lock lock = UserRepository.class
+                .getMethod("findByIdForUpdate", UUID.class)
+                .getAnnotation(Lock.class);
+
+        assertNotNull(lock);
+        assertEquals(LockModeType.PESSIMISTIC_WRITE, lock.value());
+    }
+
+    @Test
     void successfulAccountPinResetAdvancesAuthEpochAtomically() {
         User user = User.builder()
                 .id(UUID.randomUUID())
@@ -66,6 +76,7 @@ class PasswordResetAuthEpochTest {
         request.setNewPassword("654321");
 
         when(userRepository.findByEmail("person@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(user.getId())).thenReturn(Optional.of(user));
         when(tokenRepository.findTopByUserAndUsedFalseOrderByCreatedAtDesc(user))
                 .thenReturn(Optional.of(token));
         when(passwordEncoder.matches("123456", "recovery-hash")).thenReturn(true);
@@ -77,6 +88,7 @@ class PasswordResetAuthEpochTest {
         assertEquals("new-pin-hash", user.getPassword());
         assertEquals(5L, user.getAuthVersion());
         assertTrue(token.isUsed());
+        verify(userRepository).findByIdForUpdate(user.getId());
         verify(userRepository).save(user);
         verify(tokenRepository).save(token);
     }
@@ -105,6 +117,7 @@ class PasswordResetAuthEpochTest {
         request.setNewPassword("654321");
 
         when(userRepository.findByEmail("person@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(user.getId())).thenReturn(Optional.of(user));
         when(tokenRepository.findTopByUserAndUsedFalseOrderByCreatedAtDesc(user))
                 .thenReturn(Optional.of(token));
         when(passwordEncoder.matches("000000", "recovery-hash")).thenReturn(false);
@@ -113,6 +126,7 @@ class PasswordResetAuthEpochTest {
 
         assertEquals(9L, user.getAuthVersion());
         assertFalse(token.isUsed());
+        verify(userRepository).findByIdForUpdate(user.getId());
         verify(userRepository, never()).save(any());
         verify(tokenRepository, never()).save(any());
     }
