@@ -174,7 +174,11 @@ public class AuthService {
     }
 
     private AuthResponse restrictedIdentitySetupResponse(User user) {
-        String setupToken = jwtService.generateSetupToken(user.getId(), user.getEmail());
+        String setupToken = jwtService.generateSetupToken(
+                user.getId(),
+                user.getEmail(),
+                user.getAuthVersion()
+        );
         return AuthResponse.builder()
                 .message("Phone verified. Identity verification is temporarily unavailable. Wave Business setup and POS pairing are available, but all financial services remain locked until NIN and live-face verification are completed.")
                 .token(setupToken)
