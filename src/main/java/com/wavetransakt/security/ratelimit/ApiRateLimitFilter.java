@@ -174,6 +174,13 @@ public class ApiRateLimitFilter extends OncePerRequestFilter {
     }
 
     private String sourceSubject(HttpServletRequest request) {
+        /*
+         * application.yml uses server.forward-headers-strategy=framework, so
+         * Spring normalizes trusted proxy forwarding information before this
+         * filter sees the request. Deliberately do not parse X-Forwarded-For
+         * here: the limiter should consume only the framework-normalized
+         * remote address and never trust a raw client-supplied header itself.
+         */
         String remoteAddress = request.getRemoteAddr();
         if (remoteAddress == null || remoteAddress.isBlank()) {
             remoteAddress = "UNKNOWN";
