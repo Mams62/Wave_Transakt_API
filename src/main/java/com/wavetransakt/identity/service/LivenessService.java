@@ -16,12 +16,18 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Base64;
 import java.util.Locale;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class LivenessService {
+    static final int MAX_SELFIE_BYTES = 4 * 1024 * 1024;
+    static final int MAX_SELFIE_BASE64_CHARS = ((MAX_SELFIE_BYTES + 2) / 3) * 4;
+    private static final int MAX_DATA_URL_PREFIX_CHARS = 128;
+
     private final LivenessSessionRepository repository;
     private final DojahLivenessClient dojahLivenessClient;
     private final UserRepository userRepository;
@@ -47,18 +53,28 @@ public class LivenessService {
 
     @Transactional
     public LivenessCaptureResponse capture(User user, UUID sessionId, String imageBase64) {
-        LivenessSession session = repository.findById(sessionId).orElseThrow(() -> new IllegalArgumentException("Liveness session not found"));
+        String image = normalizeAndValidateSelfie(imageBase64);
+
+        /*
+         * Hold a row-level lock for the session while provider verification is
+         * in progress. This is intentionally scoped to one liveness session so
+         * duplicate concurrent captures cannot fan out into duplicate paid
+         * provider calls across API instances.
+         */
+        LivenessSession session = repository.findByIdForUpdate(sessionId)
+                .orElseThrow(() -> new IllegalArgumentException("Liveness session not found"));
         if (!session.getUser().getId().equals(user.getId())) throw new IllegalArgumentException("Liveness session not found");
         if (!providerConfigured || !dojahLivenessClient.isConfigured()) throw new IllegalStateException("Dojah identity verification is not configured on the server");
         if (session.getStatus() == LivenessStatus.VERIFIED) throw new IllegalStateException("Liveness session is already verified");
         if (session.getStatus() == LivenessStatus.REJECTED || session.getStatus() == LivenessStatus.EXPIRED) throw new IllegalStateException("Liveness session is no longer active");
+        if (session.getStatus() == LivenessStatus.IN_PROGRESS) throw new IllegalStateException("Liveness verification is already in progress");
 
         session.setStatus(LivenessStatus.IN_PROGRESS);
         session.setUpdatedAt(LocalDateTime.now());
         repository.save(session);
 
         try {
-            DojahLivenessClient.Result live = dojahLivenessClient.check(imageBase64);
+            DojahLivenessClient.Result live = dojahLivenessClient.check(image);
             if (!live.passed()) {
                 session.setStatus(LivenessStatus.REJECTED);
                 session.setProviderMessage(live.multifaceDetected() ? "Verification rejected because multiple faces were detected." : "Live-face verification failed. Capture a fresh selfie and try again.");
@@ -67,7 +83,7 @@ public class LivenessService {
                 return response(session, live, false, "Live-face verification failed.");
             }
 
-            DojahLivenessClient.IdentityMatchResult identity = dojahLivenessClient.verifySelfieNin(user.getNin(), imageBase64);
+            DojahLivenessClient.IdentityMatchResult identity = dojahLivenessClient.verifySelfieNin(user.getNin(), image);
             if (identity.match()) {
                 LocalDateTime verifiedAt = LocalDateTime.now();
                 session.setStatus(LivenessStatus.VERIFIED);
@@ -94,6 +110,49 @@ public class LivenessService {
             repository.save(session);
             throw e;
         }
+    }
+
+    private String normalizeAndValidateSelfie(String imageBase64) {
+        if (imageBase64 == null || imageBase64.isBlank()) {
+            throw new IllegalArgumentException("Selfie image is required");
+        }
+
+        String image = imageBase64.trim();
+        if (image.length() > MAX_SELFIE_BASE64_CHARS + MAX_DATA_URL_PREFIX_CHARS) {
+            throw new IllegalArgumentException("Selfie image is too large");
+        }
+
+        int comma = image.indexOf(',');
+        if (image.startsWith("data:image/") && comma >= 0) {
+            image = image.substring(comma + 1).trim();
+        }
+
+        if (image.isBlank()) {
+            throw new IllegalArgumentException("Selfie image is required");
+        }
+        if (image.length() > MAX_SELFIE_BASE64_CHARS) {
+            throw new IllegalArgumentException("Selfie image is too large");
+        }
+
+        byte[] decoded;
+        try {
+            decoded = Base64.getDecoder().decode(image);
+        } catch (IllegalArgumentException invalidBase64) {
+            throw new IllegalArgumentException("Selfie image must be valid Base64");
+        }
+
+        try {
+            if (decoded.length == 0) {
+                throw new IllegalArgumentException("Selfie image is required");
+            }
+            if (decoded.length > MAX_SELFIE_BYTES) {
+                throw new IllegalArgumentException("Selfie image is too large");
+            }
+        } finally {
+            Arrays.fill(decoded, (byte) 0);
+        }
+
+        return image;
     }
 
     private LivenessCaptureResponse response(LivenessSession session, DojahLivenessClient.Result live, boolean identityMatched, String message) {
