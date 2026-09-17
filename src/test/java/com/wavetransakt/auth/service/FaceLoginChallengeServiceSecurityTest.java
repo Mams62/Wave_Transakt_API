@@ -2,9 +2,11 @@ package com.wavetransakt.auth.service;
 
 import com.wavetransakt.auth.entity.FaceLoginChallenge;
 import com.wavetransakt.auth.repository.FaceLoginChallengeRepository;
+import com.wavetransakt.identity.dto.LivenessSessionResponse;
 import com.wavetransakt.identity.entity.LivenessSession;
 import com.wavetransakt.identity.entity.LivenessStatus;
 import com.wavetransakt.identity.repository.LivenessSessionRepository;
+import com.wavetransakt.identity.service.LivenessService;
 import com.wavetransakt.security.JwtService;
 import com.wavetransakt.user.entity.AccountStatus;
 import com.wavetransakt.user.entity.User;
@@ -30,6 +32,7 @@ class FaceLoginChallengeServiceSecurityTest {
     @Mock FaceLoginChallengeRepository repository;
     @Mock LivenessSessionRepository livenessSessionRepository;
     @Mock JwtService jwtService;
+    @Mock LivenessService livenessService;
 
     @Test
     void stateChangingLookupUsesPessimisticWriteLock() throws Exception {
@@ -39,6 +42,46 @@ class FaceLoginChallengeServiceSecurityTest {
 
         assertNotNull(lock);
         assertEquals(LockModeType.PESSIMISTIC_WRITE, lock.value());
+    }
+
+    @Test
+    void startCreatesAndBindsExactlyOneLivenessSessionUnderChallengeLock() {
+        User user = activeUser();
+        FaceLoginChallenge challenge = activeChallenge(user, null);
+        UUID sessionId = UUID.randomUUID();
+        LivenessSessionResponse response = livenessResponse(sessionId);
+
+        when(repository.findByTokenHashForUpdate(anyString())).thenReturn(Optional.of(challenge));
+        when(livenessService.start(user, "LOGIN")).thenReturn(response);
+        when(repository.save(challenge)).thenReturn(challenge);
+
+        LivenessSessionResponse result = service().startOrGetLivenessSession("challenge-token");
+
+        assertSame(response, result);
+        assertEquals(sessionId, challenge.getLivenessSessionId());
+        verify(repository).findByTokenHashForUpdate(anyString());
+        verify(livenessService).start(user, "LOGIN");
+        verify(repository).save(challenge);
+        verify(livenessService, never()).status(any(), any());
+        verify(repository, never()).findByTokenHash(anyString());
+    }
+
+    @Test
+    void repeatedStartReturnsBoundSessionWithoutCreatingAnother() {
+        User user = activeUser();
+        UUID sessionId = UUID.randomUUID();
+        FaceLoginChallenge challenge = activeChallenge(user, sessionId);
+        LivenessSessionResponse response = livenessResponse(sessionId);
+
+        when(repository.findByTokenHashForUpdate(anyString())).thenReturn(Optional.of(challenge));
+        when(livenessService.status(user, sessionId)).thenReturn(response);
+
+        LivenessSessionResponse result = service().startOrGetLivenessSession("challenge-token");
+
+        assertSame(response, result);
+        verify(livenessService).status(user, sessionId);
+        verify(livenessService, never()).start(any(), anyString());
+        verify(repository, never()).save(any());
     }
 
     @Test
@@ -141,7 +184,26 @@ class FaceLoginChallengeServiceSecurityTest {
     }
 
     private FaceLoginChallengeService service() {
-        return new FaceLoginChallengeService(repository, livenessSessionRepository, jwtService);
+        return new FaceLoginChallengeService(
+                repository,
+                livenessSessionRepository,
+                jwtService,
+                livenessService
+        );
+    }
+
+    private LivenessSessionResponse livenessResponse(UUID sessionId) {
+        return new LivenessSessionResponse(
+                sessionId,
+                "DOJAH",
+                null,
+                "PENDING",
+                "LOGIN",
+                "Capture a live selfie.",
+                true,
+                LocalDateTime.now(),
+                null
+        );
     }
 
     private User activeUser() {
