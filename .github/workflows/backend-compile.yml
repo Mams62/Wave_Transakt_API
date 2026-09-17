@@ -35,6 +35,7 @@ on:
       - fix/revoke-all-sessions-20260916
       - fix/login-failure-throttle-client-ip-20260916
       - fix/login-otp-failure-throttle-20260917
+      - fix/liveness-capture-abuse-20260917
   pull_request:
     branches:
       - controlled-start-api-20260910
@@ -63,7 +64,7 @@ jobs:
         run: mvn -B -DskipTests package
 
       - name: Run financial, merchant, card, transfer, observability, abuse-protection and authentication safety unit tests
-        run: mvn -B -Dtest=ServicePaymentServiceTest,VtpassVerificationClientTest,VtpassSmileClientTest,SmilePaymentServiceTest,ServiceFulfillmentCryptoTest,WaecPaymentServiceTest,VtpassWaecPurchaseClientTest,JambPaymentServiceTest,VtpassJambPurchaseClientTest,InterswitchBankTransferGatewayTest,ExternalBankTransferOrchestratorTest,ExternalBankTransferPinAuthorizationTest,CustomerFundingAccountServiceTest,CustomerFundingEventServiceTest,CustomerFundingCreditServiceTest,CustomerFundingOperationsServiceTest,ProviderFundingLedgerServiceTest,MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,InterswitchCardIssuingGatewayTest,WaveCardServiceTest,PosClientServiceTest,PosTerminalSessionServiceTest,ProviderTerminalLinkServiceTest,ProviderEventIngressServiceTest,TerminalProvisioningServiceTest,ApiRequestContextFilterTest,DistributedRateLimitServiceTest,ApiRateLimitFilterTest,RateLimitGuardTest,VerificationServiceSecurityTest,VerificationAuthEpochTest,AuthServiceSecurityTest,FaceLoginChallengeServiceSecurityTest,JwtAuthEpochSecurityTest,PasswordResetAuthEpochTest,SessionRevocationServiceTest,TransactionPinGuardTest,AuthorizedTransferServiceTest,AuthorizedPaymentQrServiceTest,ServicePaymentPinAuthorizationTest test
+        run: mvn -B -Dtest=ServicePaymentServiceTest,VtpassVerificationClientTest,VtpassSmileClientTest,SmilePaymentServiceTest,ServiceFulfillmentCryptoTest,WaecPaymentServiceTest,VtpassWaecPurchaseClientTest,JambPaymentServiceTest,VtpassJambPurchaseClientTest,InterswitchBankTransferGatewayTest,ExternalBankTransferOrchestratorTest,ExternalBankTransferPinAuthorizationTest,CustomerFundingAccountServiceTest,CustomerFundingEventServiceTest,CustomerFundingCreditServiceTest,CustomerFundingOperationsServiceTest,ProviderFundingLedgerServiceTest,MerchantReceiptPolicyTest,InterswitchMerchantAcquiringGatewayTest,InterswitchCardIssuingGatewayTest,WaveCardServiceTest,PosClientServiceTest,PosTerminalSessionServiceTest,ProviderTerminalLinkServiceTest,ProviderEventIngressServiceTest,TerminalProvisioningServiceTest,ApiRequestContextFilterTest,DistributedRateLimitServiceTest,ApiRateLimitFilterTest,RateLimitGuardTest,VerificationServiceSecurityTest,VerificationAuthEpochTest,AuthServiceSecurityTest,FaceLoginChallengeServiceSecurityTest,LivenessServiceSecurityTest,JwtAuthEpochSecurityTest,PasswordResetAuthEpochTest,SessionRevocationServiceTest,TransactionPinGuardTest,AuthorizedTransferServiceTest,AuthorizedPaymentQrServiceTest,ServicePaymentPinAuthorizationTest test
 
       - name: Build Render Docker image
         run: docker build -t wave-transakt-api-ci .
