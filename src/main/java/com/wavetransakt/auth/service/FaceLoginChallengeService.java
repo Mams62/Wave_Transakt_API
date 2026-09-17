@@ -2,11 +2,9 @@ package com.wavetransakt.auth.service;
 
 import com.wavetransakt.auth.entity.FaceLoginChallenge;
 import com.wavetransakt.auth.repository.FaceLoginChallengeRepository;
-import com.wavetransakt.identity.dto.LivenessSessionResponse;
 import com.wavetransakt.identity.entity.LivenessSession;
 import com.wavetransakt.identity.entity.LivenessStatus;
 import com.wavetransakt.identity.repository.LivenessSessionRepository;
-import com.wavetransakt.identity.service.LivenessService;
 import com.wavetransakt.security.JwtService;
 import com.wavetransakt.user.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -32,7 +30,6 @@ public class FaceLoginChallengeService {
     private final FaceLoginChallengeRepository repository;
     private final LivenessSessionRepository livenessSessionRepository;
     private final JwtService jwtService;
-    private final LivenessService livenessService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Transactional
@@ -56,27 +53,6 @@ public class FaceLoginChallengeService {
     @Transactional(readOnly = true)
     public FaceLoginChallenge requireActive(String rawToken) {
         return validateActive(findByRawToken(rawToken, false));
-    }
-
-    /**
-     * Creates at most one LOGIN liveness session for a face challenge. The
-     * challenge row is locked before session creation, so concurrent starts on
-     * different API instances serialize and either create-and-bind once or
-     * return the session that is already bound.
-     */
-    @Transactional
-    public LivenessSessionResponse startOrGetLivenessSession(String rawToken) {
-        FaceLoginChallenge challenge = validateActive(findByRawToken(rawToken, true));
-
-        UUID existingSessionId = challenge.getLivenessSessionId();
-        if (existingSessionId != null) {
-            return livenessService.status(challenge.getUser(), existingSessionId);
-        }
-
-        LivenessSessionResponse response = livenessService.start(challenge.getUser(), "LOGIN");
-        challenge.setLivenessSessionId(response.sessionId());
-        repository.save(challenge);
-        return response;
     }
 
     @Transactional
