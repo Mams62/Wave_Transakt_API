@@ -1,5 +1,6 @@
 package com.wavetransakt.auth.service;
 
+import com.wavetransakt.auth.dto.LoginOtpRequest;
 import com.wavetransakt.identity.provider.DojahGovernmentIdentityClient;
 import com.wavetransakt.security.JwtService;
 import com.wavetransakt.security.ratelimit.RateLimitExceededException;
@@ -18,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -146,6 +148,90 @@ class AuthServiceSecurityTest {
         verify(rateLimitGuard, never()).requireAllowed(anyString(), anyString(), anyInt(), any(Duration.class));
     }
 
+    @Test
+    void invalidLoginOtpCountsFailure() {
+        LoginOtpRequest request = loginOtpRequest("person@example.com", "000000");
+        when(rateLimitGuard.canonicalIdentifier("person@example.com")).thenReturn("person@example.com");
+        when(verificationService.verifyLoginPhoneCode("person@example.com", "000000"))
+                .thenThrow(new IllegalArgumentException("Invalid or expired verification code"));
+
+        IllegalArgumentException error = assertThrows(
+                IllegalArgumentException.class,
+                () -> service().verifyLoginOtp(request)
+        );
+
+        assertEquals("Invalid or expired verification code", error.getMessage());
+        verify(rateLimitGuard).requireNotBlocked(
+                "AUTH_LOGIN_OTP_FAILURE",
+                "person@example.com",
+                8,
+                Duration.ofMinutes(10)
+        );
+        verify(rateLimitGuard).requireAllowed(
+                "AUTH_LOGIN_OTP_FAILURE",
+                "person@example.com",
+                8,
+                Duration.ofMinutes(10)
+        );
+    }
+
+    @Test
+    void successfulLoginOtpChecksLockButDoesNotConsumeFailureQuota() {
+        LoginOtpRequest request = loginOtpRequest("person@example.com", "111222");
+        User existing = activeUser();
+        existing.setNinVerified(true);
+        FaceLoginChallengeService.IssuedChallenge challenge =
+                new FaceLoginChallengeService.IssuedChallenge(
+                        "face-token",
+                        LocalDateTime.now().plusMinutes(10)
+                );
+
+        when(rateLimitGuard.canonicalIdentifier("person@example.com")).thenReturn("person@example.com");
+        when(verificationService.verifyLoginPhoneCode("person@example.com", "111222"))
+                .thenReturn(existing);
+        when(faceLoginChallengeService.issue(existing)).thenReturn(challenge);
+
+        service().verifyLoginOtp(request);
+
+        verify(rateLimitGuard).requireNotBlocked(
+                "AUTH_LOGIN_OTP_FAILURE",
+                "person@example.com",
+                8,
+                Duration.ofMinutes(10)
+        );
+        verify(rateLimitGuard, never()).requireAllowed(
+                eq("AUTH_LOGIN_OTP_FAILURE"),
+                anyString(),
+                eq(8),
+                eq(Duration.ofMinutes(10))
+        );
+        verify(faceLoginChallengeService).issue(existing);
+    }
+
+    @Test
+    void lockedOtpIdentifierFailsBeforeOtpVerification() {
+        LoginOtpRequest request = loginOtpRequest("person@example.com", "111222");
+        when(rateLimitGuard.canonicalIdentifier("person@example.com")).thenReturn("person@example.com");
+        doThrow(new RateLimitExceededException(120))
+                .when(rateLimitGuard)
+                .requireNotBlocked(
+                        "AUTH_LOGIN_OTP_FAILURE",
+                        "person@example.com",
+                        8,
+                        Duration.ofMinutes(10)
+                );
+
+        assertThrows(RateLimitExceededException.class, () -> service().verifyLoginOtp(request));
+
+        verifyNoInteractions(verificationService, faceLoginChallengeService);
+        verify(rateLimitGuard, never()).requireAllowed(
+                eq("AUTH_LOGIN_OTP_FAILURE"),
+                anyString(),
+                anyInt(),
+                any(Duration.class)
+        );
+    }
+
     private AuthService service() {
         return new AuthService(
                 userRepository,
@@ -173,6 +259,13 @@ class AuthServiceSecurityTest {
         LoginRequest request = new LoginRequest();
         request.setIdentifier(identifier);
         request.setAccountPin(pin);
+        return request;
+    }
+
+    private LoginOtpRequest loginOtpRequest(String identifier, String otp) {
+        LoginOtpRequest request = new LoginOtpRequest();
+        request.setIdentifier(identifier);
+        request.setOtp(otp);
         return request;
     }
 }

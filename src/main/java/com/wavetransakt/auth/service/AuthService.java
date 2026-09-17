@@ -30,8 +30,11 @@ public class AuthService {
     private static final String INVALID_LOGIN_MESSAGE = "Invalid email/phone or account PIN";
     private static final String DUMMY_PIN_WORK = "wave-transakt-login-timing-equalizer";
     private static final String LOGIN_FAILURE_POLICY = "AUTH_LOGIN_FAILURE";
+    private static final String LOGIN_OTP_FAILURE_POLICY = "AUTH_LOGIN_OTP_FAILURE";
     private static final int LOGIN_FAILURE_LIMIT = 8;
+    private static final int LOGIN_OTP_FAILURE_LIMIT = 8;
     private static final Duration LOGIN_FAILURE_WINDOW = Duration.ofMinutes(10);
+    private static final Duration LOGIN_OTP_FAILURE_WINDOW = Duration.ofMinutes(10);
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -152,7 +155,24 @@ public class AuthService {
 
     @Transactional
     public AuthResponse verifyLoginOtp(LoginOtpRequest request) {
-        User user = verificationService.verifyLoginPhoneCode(request.getIdentifier(), request.getOtp());
+        String otpSubject = rateLimitGuard.canonicalIdentifier(request.getIdentifier());
+        rateLimitGuard.requireNotBlocked(
+                LOGIN_OTP_FAILURE_POLICY,
+                otpSubject,
+                LOGIN_OTP_FAILURE_LIMIT,
+                LOGIN_OTP_FAILURE_WINDOW
+        );
+
+        User user;
+        try {
+            user = verificationService.verifyLoginPhoneCode(
+                    request.getIdentifier(),
+                    request.getOtp()
+            );
+        } catch (IllegalArgumentException invalidOtp) {
+            recordLoginOtpFailure(otpSubject);
+            throw invalidOtp;
+        }
 
         if (!user.isEnabled()) {
             throw new IllegalArgumentException("Account is not active. Please verify your email.");
@@ -312,6 +332,15 @@ public class AuthService {
                 loginSubject,
                 LOGIN_FAILURE_LIMIT,
                 LOGIN_FAILURE_WINDOW
+        );
+    }
+
+    private void recordLoginOtpFailure(String otpSubject) {
+        rateLimitGuard.requireAllowed(
+                LOGIN_OTP_FAILURE_POLICY,
+                otpSubject,
+                LOGIN_OTP_FAILURE_LIMIT,
+                LOGIN_OTP_FAILURE_WINDOW
         );
     }
 
