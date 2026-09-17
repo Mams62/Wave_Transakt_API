@@ -40,8 +40,6 @@ public class ApiRateLimitFilter extends OncePerRequestFilter {
             Pattern.compile("^/api/v1/qr/wallet/[^/]+$");
     private static final Pattern ADMIN_RECON_ACTION =
             Pattern.compile("^/api/v1/admin/funding-reconciliation/events/[^/]+/actions$");
-    private static final Pattern LIVENESS_CAPTURE =
-            Pattern.compile("^/api/v1/identity/liveness/[^/]+/capture$");
 
     private final DistributedRateLimitService rateLimitService;
     private final boolean enabled;
@@ -121,7 +119,6 @@ public class ApiRateLimitFilter extends OncePerRequestFilter {
                 case "/api/auth/password/reset" -> source("RECOVERY_RESET_SOURCE", 60, Duration.ofMinutes(15));
                 case "/api/verification/email" -> source("EMAIL_VERIFY_SOURCE", 60, Duration.ofMinutes(10));
                 case "/api/verification/email/resend" -> source("EMAIL_RESEND_SOURCE", 20, Duration.ofMinutes(15));
-                case "/api/v1/identity/liveness/start" -> user("LIVENESS_START_USER", 6, Duration.ofMinutes(1));
                 case "/api/transactions/transfer",
                         "/api/v1/qr/payment/pay",
                         "/api/v1/qr/wallet/pay",
@@ -139,9 +136,6 @@ public class ApiRateLimitFilter extends OncePerRequestFilter {
                     }
                     if (ADMIN_RECON_ACTION.matcher(uri).matches()) {
                         yield user("ADMIN_RECON_ACTION_USER", 60, Duration.ofMinutes(1));
-                    }
-                    if (LIVENESS_CAPTURE.matcher(uri).matches()) {
-                        yield user("LIVENESS_CAPTURE_USER", 6, Duration.ofMinutes(1));
                     }
                     yield null;
                 }

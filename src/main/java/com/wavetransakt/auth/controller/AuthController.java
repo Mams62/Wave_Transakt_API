@@ -53,12 +53,13 @@ public class AuthController {
         return ResponseEntity.ok(authService.verifyLoginOtp(request));
     }
 
-    /** Creates or returns the single LOGIN liveness session bound to this challenge. */
+    /** Creates a LOGIN-purpose liveness session bound to the OTP-approved challenge. */
     @PostMapping("/login/face/start")
     public ResponseEntity<LivenessSessionResponse> startFaceLogin(@RequestBody FaceChallengeRequest request) {
-        return ResponseEntity.ok(
-                faceLoginChallengeService.startOrGetLivenessSession(request.faceChallengeToken())
-        );
+        FaceLoginChallenge challenge = faceLoginChallengeService.requireActive(request.faceChallengeToken());
+        LivenessSessionResponse response = livenessService.start(challenge.getUser(), "LOGIN");
+        faceLoginChallengeService.bindLivenessSession(request.faceChallengeToken(), response.sessionId());
+        return ResponseEntity.ok(response);
     }
 
     /** Sends the transient selfie through liveness + account-identity matching. */
