@@ -220,13 +220,29 @@ class ApiRateLimitFilterTest {
     }
 
     @Test
-    void routeMappingKeepsProviderWebhooksOutOfGenericThrottle() {
+    void routeMappingKeepsProviderWebhooksOutAndThrottlesLivenessWork() {
         ApiRateLimitFilter filter = new ApiRateLimitFilter(rateLimitService, true);
 
         assertNull(filter.ruleFor("POST", "/api/v1/identity/liveness/webhook"));
         assertNull(filter.ruleFor("POST", "/api/payment/webhook/paystack"));
         assertNotNull(filter.ruleFor("GET", "/api/v1/transfers/bank/resolve"));
         assertNotNull(filter.ruleFor("GET", "/api/v1/qr/wallet/WT1234567890"));
+
+        ApiRateLimitFilter.RateRule start =
+                filter.ruleFor("POST", "/api/v1/identity/liveness/start");
+        assertNotNull(start);
+        assertEquals("LIVENESS_START_USER", start.policyCode());
+        assertEquals(6, start.limit());
+        assertEquals(Duration.ofMinutes(1), start.window());
+        assertEquals(ApiRateLimitFilter.SubjectMode.USER, start.subjectMode());
+
+        ApiRateLimitFilter.RateRule capture =
+                filter.ruleFor("POST", "/api/v1/identity/liveness/123e4567-e89b-12d3-a456-426614174000/capture");
+        assertNotNull(capture);
+        assertEquals("LIVENESS_CAPTURE_USER", capture.policyCode());
+        assertEquals(6, capture.limit());
+        assertEquals(Duration.ofMinutes(1), capture.window());
+        assertEquals(ApiRateLimitFilter.SubjectMode.USER, capture.subjectMode());
     }
 
     private DistributedRateLimitService.RateLimitDecision allowed(int limit, int remaining) {
