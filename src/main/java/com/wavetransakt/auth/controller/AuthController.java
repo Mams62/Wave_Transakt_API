@@ -9,7 +9,6 @@ import com.wavetransakt.auth.service.SessionRevocationService;
 import com.wavetransakt.identity.dto.LivenessCaptureResponse;
 import com.wavetransakt.identity.dto.LivenessSessionResponse;
 import com.wavetransakt.identity.service.LivenessService;
-import com.wavetransakt.security.ratelimit.RateLimitGuard;
 import com.wavetransakt.user.dto.LoginRequest;
 import com.wavetransakt.user.dto.RegisterRequest;
 import com.wavetransakt.user.dto.UserProfileResponse;
@@ -23,7 +22,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 
@@ -36,7 +34,6 @@ public class AuthController {
     private final WalletRepository walletRepository;
     private final FaceLoginChallengeService faceLoginChallengeService;
     private final LivenessService livenessService;
-    private final RateLimitGuard rateLimitGuard;
     private final SessionRevocationService sessionRevocationService;
 
     @PostMapping("/register")
@@ -53,12 +50,6 @@ public class AuthController {
     /** Verifies registered-phone OTP and returns only a short-lived face challenge. */
     @PostMapping("/login/otp")
     public ResponseEntity<AuthResponse> verifyLoginOtp(@Valid @RequestBody LoginOtpRequest request) {
-        rateLimitGuard.requireAllowed(
-                "AUTH_OTP_IDENTIFIER",
-                rateLimitGuard.canonicalIdentifier(request.getIdentifier()),
-                8,
-                Duration.ofMinutes(10)
-        );
         return ResponseEntity.ok(authService.verifyLoginOtp(request));
     }
 
