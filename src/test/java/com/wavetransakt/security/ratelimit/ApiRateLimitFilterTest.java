@@ -10,6 +10,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.filter.ForwardedHeaderFilter;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -52,6 +53,75 @@ class ApiRateLimitFilterTest {
         assertTrue(invoked.get());
         assertEquals("60", response.getHeader("X-RateLimit-Limit"));
         assertEquals("59", response.getHeader("X-RateLimit-Remaining"));
+    }
+
+    @Test
+    void rawForwardedForHeaderIsNeverParsedDirectlyByLimiter() throws Exception {
+        when(rateLimitService.consume(
+                eq("AUTH_LOGIN_SOURCE"),
+                eq("SOURCE:10.0.0.7"),
+                eq(60),
+                eq(Duration.ofMinutes(5))
+        )).thenReturn(allowed(60, 59));
+
+        ApiRateLimitFilter filter = new ApiRateLimitFilter(rateLimitService, true);
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/login");
+        request.setRemoteAddr("10.0.0.7");
+        request.addHeader("X-Forwarded-For", "198.51.100.55");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, (req, res) -> { });
+
+        verify(rateLimitService).consume(
+                "AUTH_LOGIN_SOURCE",
+                "SOURCE:10.0.0.7",
+                60,
+                Duration.ofMinutes(5)
+        );
+        verify(rateLimitService, never()).consume(
+                eq("AUTH_LOGIN_SOURCE"),
+                eq("SOURCE:198.51.100.55"),
+                anyInt(),
+                any(Duration.class)
+        );
+    }
+
+    @Test
+    void springForwardedHeaderNormalizationFeedsClientAddressToLimiter() throws Exception {
+        when(rateLimitService.consume(
+                eq("AUTH_LOGIN_SOURCE"),
+                eq("SOURCE:198.51.100.55"),
+                eq(60),
+                eq(Duration.ofMinutes(5))
+        )).thenReturn(allowed(60, 59));
+
+        ApiRateLimitFilter apiFilter = new ApiRateLimitFilter(rateLimitService, true);
+        ForwardedHeaderFilter forwardedHeaderFilter = new ForwardedHeaderFilter();
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/login");
+        request.setRemoteAddr("10.0.0.7");
+        request.addHeader("X-Forwarded-For", "198.51.100.55");
+        request.addHeader("X-Forwarded-Proto", "https");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicBoolean invoked = new AtomicBoolean(false);
+
+        forwardedHeaderFilter.doFilter(
+                request,
+                response,
+                (forwardedRequest, forwardedResponse) -> apiFilter.doFilter(
+                        forwardedRequest,
+                        forwardedResponse,
+                        (req, res) -> invoked.set(true)
+                )
+        );
+
+        assertTrue(invoked.get());
+        verify(rateLimitService).consume(
+                "AUTH_LOGIN_SOURCE",
+                "SOURCE:198.51.100.55",
+                60,
+                Duration.ofMinutes(5)
+        );
     }
 
     @Test

@@ -2,6 +2,8 @@ package com.wavetransakt.auth.service;
 
 import com.wavetransakt.identity.provider.DojahGovernmentIdentityClient;
 import com.wavetransakt.security.JwtService;
+import com.wavetransakt.security.ratelimit.RateLimitExceededException;
+import com.wavetransakt.security.ratelimit.RateLimitGuard;
 import com.wavetransakt.user.dto.LoginRequest;
 import com.wavetransakt.user.entity.AccountStatus;
 import com.wavetransakt.user.entity.User;
@@ -15,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Duration;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -33,60 +36,114 @@ class AuthServiceSecurityTest {
     @Mock FaceLoginChallengeService faceLoginChallengeService;
     @Mock DojahGovernmentIdentityClient governmentIdentityClient;
     @Mock JwtService jwtService;
+    @Mock RateLimitGuard rateLimitGuard;
 
     @Test
-    void missingAccountPerformsPasswordWorkAndReturnsGenericCredentialError() {
+    void missingAccountPerformsPasswordWorkCountsFailureAndReturnsGenericCredentialError() {
         LoginRequest request = loginRequest("missing@example.com", "123456");
+        when(rateLimitGuard.canonicalIdentifier("missing@example.com")).thenReturn("missing@example.com");
         when(userRepository.findByEmail("missing@example.com")).thenReturn(Optional.empty());
         when(userRepository.findByPhone("missing@example.com")).thenReturn(Optional.empty());
         when(passwordEncoder.encode(anyString())).thenReturn("discarded-bcrypt-hash");
 
-        AuthService service = service();
-
         IllegalArgumentException error = assertThrows(
                 IllegalArgumentException.class,
-                () -> service.login(request)
+                () -> service().login(request)
         );
 
         assertEquals("Invalid email/phone or account PIN", error.getMessage());
+        verify(rateLimitGuard).requireNotBlocked(
+                "AUTH_LOGIN_FAILURE",
+                "missing@example.com",
+                8,
+                Duration.ofMinutes(10)
+        );
+        verify(rateLimitGuard).requireAllowed(
+                "AUTH_LOGIN_FAILURE",
+                "missing@example.com",
+                8,
+                Duration.ofMinutes(10)
+        );
         verify(passwordEncoder).encode(anyString());
         verify(passwordEncoder, never()).matches(anyString(), anyString());
         verifyNoInteractions(smsOtpSender);
     }
 
     @Test
-    void wrongPinUsesSamePublicErrorAsMissingAccount() {
-        LoginRequest missing = loginRequest("missing@example.com", "123456");
-        when(userRepository.findByEmail("missing@example.com")).thenReturn(Optional.empty());
-        when(userRepository.findByPhone("missing@example.com")).thenReturn(Optional.empty());
-        when(passwordEncoder.encode(anyString())).thenReturn("discarded-bcrypt-hash");
-
-        AuthService service = service();
-        IllegalArgumentException missingError = assertThrows(
-                IllegalArgumentException.class,
-                () -> service.login(missing)
-        );
-
-        reset(userRepository, passwordEncoder);
-
-        User existing = User.builder()
-                .email("person@example.com")
-                .phone("08000000000")
-                .password("stored-bcrypt-hash")
-                .accountStatus(AccountStatus.ACTIVE)
-                .build();
+    void wrongPinUsesSamePublicErrorAndCountsFailure() {
+        User existing = activeUser();
         LoginRequest wrongPin = loginRequest("person@example.com", "654321");
+        when(rateLimitGuard.canonicalIdentifier("person@example.com")).thenReturn("person@example.com");
         when(userRepository.findByEmail("person@example.com")).thenReturn(Optional.of(existing));
         when(passwordEncoder.matches("654321", "stored-bcrypt-hash")).thenReturn(false);
 
-        IllegalArgumentException wrongPinError = assertThrows(
+        IllegalArgumentException error = assertThrows(
                 IllegalArgumentException.class,
-                () -> service.login(wrongPin)
+                () -> service().login(wrongPin)
         );
 
-        assertEquals(missingError.getMessage(), wrongPinError.getMessage());
+        assertEquals("Invalid email/phone or account PIN", error.getMessage());
+        verify(rateLimitGuard).requireNotBlocked(
+                "AUTH_LOGIN_FAILURE",
+                "person@example.com",
+                8,
+                Duration.ofMinutes(10)
+        );
+        verify(rateLimitGuard).requireAllowed(
+                "AUTH_LOGIN_FAILURE",
+                "person@example.com",
+                8,
+                Duration.ofMinutes(10)
+        );
         verify(passwordEncoder).matches("654321", "stored-bcrypt-hash");
         verify(passwordEncoder, never()).encode(anyString());
+    }
+
+    @Test
+    void successfulLoginChecksFailureLockButDoesNotConsumeFailureQuota() {
+        User existing = activeUser();
+        LoginRequest request = loginRequest("person@example.com", "123456");
+        when(rateLimitGuard.canonicalIdentifier("person@example.com")).thenReturn("person@example.com");
+        when(userRepository.findByEmail("person@example.com")).thenReturn(Optional.of(existing));
+        when(passwordEncoder.matches("123456", "stored-bcrypt-hash")).thenReturn(true);
+        when(verificationService.createPhoneVerificationCode(existing)).thenReturn("111222");
+        when(smsOtpSender.sendLoginOtp("08000000000", "111222")).thenReturn(true);
+
+        service().login(request);
+
+        verify(rateLimitGuard).requireNotBlocked(
+                "AUTH_LOGIN_FAILURE",
+                "person@example.com",
+                8,
+                Duration.ofMinutes(10)
+        );
+        verify(rateLimitGuard, never()).requireAllowed(
+                eq("AUTH_LOGIN_FAILURE"),
+                anyString(),
+                eq(8),
+                eq(Duration.ofMinutes(10))
+        );
+        verify(verificationService).createPhoneVerificationCode(existing);
+        verify(smsOtpSender).sendLoginOtp("08000000000", "111222");
+    }
+
+    @Test
+    void lockedIdentifierFailsBeforeAccountLookupOrPasswordWork() {
+        LoginRequest request = loginRequest("person@example.com", "123456");
+        when(rateLimitGuard.canonicalIdentifier("person@example.com")).thenReturn("person@example.com");
+        doThrow(new RateLimitExceededException(120))
+                .when(rateLimitGuard)
+                .requireNotBlocked(
+                        "AUTH_LOGIN_FAILURE",
+                        "person@example.com",
+                        8,
+                        Duration.ofMinutes(10)
+                );
+
+        assertThrows(RateLimitExceededException.class, () -> service().login(request));
+
+        verifyNoInteractions(userRepository, passwordEncoder, verificationService, smsOtpSender);
+        verify(rateLimitGuard, never()).requireAllowed(anyString(), anyString(), anyInt(), any(Duration.class));
     }
 
     private AuthService service() {
@@ -98,8 +155,18 @@ class AuthServiceSecurityTest {
                 smsOtpSender,
                 faceLoginChallengeService,
                 governmentIdentityClient,
-                jwtService
+                jwtService,
+                rateLimitGuard
         );
+    }
+
+    private User activeUser() {
+        return User.builder()
+                .email("person@example.com")
+                .phone("08000000000")
+                .password("stored-bcrypt-hash")
+                .accountStatus(AccountStatus.ACTIVE)
+                .build();
     }
 
     private LoginRequest loginRequest(String identifier, String pin) {

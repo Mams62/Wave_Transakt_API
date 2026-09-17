@@ -47,12 +47,6 @@ public class AuthController {
     /** Starts credential login. No JWT is issued yet. */
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-        rateLimitGuard.requireAllowed(
-                "AUTH_LOGIN_IDENTIFIER",
-                rateLimitGuard.canonicalIdentifier(request.getIdentifier()),
-                8,
-                Duration.ofMinutes(10)
-        );
         return ResponseEntity.ok(authService.login(request));
     }
 

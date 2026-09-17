@@ -33,6 +33,7 @@ on:
       - fix/transaction-pin-lockout-20260916
       - fix/auth-epoch-session-revocation-20260916
       - fix/revoke-all-sessions-20260916
+      - fix/login-failure-throttle-client-ip-20260916
   pull_request:
     branches:
       - controlled-start-api-20260910

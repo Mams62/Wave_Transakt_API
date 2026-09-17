@@ -4,6 +4,7 @@ import com.wavetransakt.auth.dto.AuthResponse;
 import com.wavetransakt.auth.dto.LoginOtpRequest;
 import com.wavetransakt.identity.provider.DojahGovernmentIdentityClient;
 import com.wavetransakt.security.JwtService;
+import com.wavetransakt.security.ratelimit.RateLimitGuard;
 import com.wavetransakt.user.dto.LoginRequest;
 import com.wavetransakt.user.dto.RegisterRequest;
 import com.wavetransakt.user.entity.User;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.text.Normalizer;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Locale;
 
@@ -27,6 +29,9 @@ public class AuthService {
 
     private static final String INVALID_LOGIN_MESSAGE = "Invalid email/phone or account PIN";
     private static final String DUMMY_PIN_WORK = "wave-transakt-login-timing-equalizer";
+    private static final String LOGIN_FAILURE_POLICY = "AUTH_LOGIN_FAILURE";
+    private static final int LOGIN_FAILURE_LIMIT = 8;
+    private static final Duration LOGIN_FAILURE_WINDOW = Duration.ofMinutes(10);
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -36,6 +41,7 @@ public class AuthService {
     private final FaceLoginChallengeService faceLoginChallengeService;
     private final DojahGovernmentIdentityClient governmentIdentityClient;
     private final JwtService jwtService;
+    private final RateLimitGuard rateLimitGuard;
 
     @Value("${wave.demo.return-verification-code:false}")
     private boolean returnVerificationCode;
@@ -94,6 +100,14 @@ public class AuthService {
 
     @Transactional
     public AuthResponse login(LoginRequest request) {
+        String loginSubject = rateLimitGuard.canonicalIdentifier(request.getIdentifier());
+        rateLimitGuard.requireNotBlocked(
+                LOGIN_FAILURE_POLICY,
+                loginSubject,
+                LOGIN_FAILURE_LIMIT,
+                LOGIN_FAILURE_WINDOW
+        );
+
         User user = findUserByIdentifier(request.getIdentifier());
 
         if (user == null) {
@@ -104,10 +118,12 @@ public class AuthService {
              * credential error used for a wrong PIN.
              */
             passwordEncoder.encode(DUMMY_PIN_WORK);
+            recordLoginFailure(loginSubject);
             throw new IllegalArgumentException(INVALID_LOGIN_MESSAGE);
         }
 
         if (!passwordEncoder.matches(request.getAccountPin(), user.getPassword())) {
+            recordLoginFailure(loginSubject);
             throw new IllegalArgumentException(INVALID_LOGIN_MESSAGE);
         }
         if (!user.isEnabled()) {
@@ -288,6 +304,15 @@ public class AuthService {
         String raw = identifier.trim();
         return userRepository.findByEmail(raw.toLowerCase(Locale.ROOT))
                 .orElseGet(() -> userRepository.findByPhone(raw).orElse(null));
+    }
+
+    private void recordLoginFailure(String loginSubject) {
+        rateLimitGuard.requireAllowed(
+                LOGIN_FAILURE_POLICY,
+                loginSubject,
+                LOGIN_FAILURE_LIMIT,
+                LOGIN_FAILURE_WINDOW
+        );
     }
 
     private String maskPhone(String phone) {
