@@ -1,5 +1,6 @@
 package com.wavetransakt.security.ratelimit;
 
+import com.wavetransakt.common.NigerianPhoneNumber;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -54,6 +55,7 @@ public class RateLimitGuard {
         if (normalized.contains("@")) {
             return normalized.toLowerCase(Locale.ROOT);
         }
-        return normalized;
+        return NigerianPhoneNumber.tryToLocal(normalized)
+                .orElse(normalized);
     }
 }
