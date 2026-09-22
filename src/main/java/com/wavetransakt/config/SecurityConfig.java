@@ -66,6 +66,14 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers("/api/v1/identity/liveness/webhook")
                         .permitAll()
+                        // POS devices do not use a customer JWT. Pairing is authorized
+                        // by a one-time code and every session endpoint validates the
+                        // X-Wave-POS-Session token in PosTerminalSessionService.
+                        .requestMatchers(
+                                "/api/v1/pos/pairing/redeem",
+                                "/api/v1/pos/session/**"
+                        )
+                        .permitAll()
                         .requestMatchers("/api/v1/admin/**")
                         .hasRole("ADMIN")
                         .requestMatchers(

@@ -117,6 +117,7 @@ public class ApiRateLimitFilter extends OncePerRequestFilter {
                         "/api/auth/login/face/complete" -> source("AUTH_FACE_SOURCE", 90, Duration.ofMinutes(5));
                 case "/api/auth/password/forgot" -> source("RECOVERY_REQUEST_SOURCE", 30, Duration.ofMinutes(15));
                 case "/api/auth/password/reset" -> source("RECOVERY_RESET_SOURCE", 60, Duration.ofMinutes(15));
+                case "/api/v1/pos/pairing/redeem" -> source("POS_PAIRING_REDEEM_SOURCE", 30, Duration.ofMinutes(5));
                 case "/api/verification/email" -> source("EMAIL_VERIFY_SOURCE", 60, Duration.ofMinutes(10));
                 case "/api/verification/email/resend" -> source("EMAIL_RESEND_SOURCE", 20, Duration.ofMinutes(15));
                 case "/api/transactions/transfer",
