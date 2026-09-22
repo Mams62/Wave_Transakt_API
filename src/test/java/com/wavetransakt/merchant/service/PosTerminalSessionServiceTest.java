@@ -50,6 +50,33 @@ class PosTerminalSessionServiceTest {
     }
 
     @Test
+    void creatingNewPairingCodeInvalidatesPreviousActiveCode() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        PosTerminal terminal = terminal(ownerId);
+        PosPairingCode previous = PosPairingCode.builder()
+                .id(UUID.randomUUID())
+                .terminal(terminal)
+                .createdByUserId(ownerId)
+                .codeHash("old-hash")
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .createdAt(LocalDateTime.now().minusMinutes(1))
+                .build();
+
+        PosTerminalLookupRepository terminalRepo = mock(PosTerminalLookupRepository.class);
+        PosPairingCodeRepository pairingRepo = mock(PosPairingCodeRepository.class);
+        PosTerminalSessionRepository sessionRepo = mock(PosTerminalSessionRepository.class);
+        when(terminalRepo.findByTerminalCode("WTPOS-TEST")).thenReturn(Optional.of(terminal));
+        when(pairingRepo.findAllByTerminalId(terminal.getId())).thenReturn(List.of(previous));
+
+        PosTerminalSessionService service = service(terminalRepo, pairingRepo, sessionRepo);
+        service.createPairingCode(ownerId, "WTPOS-TEST");
+
+        assertNotNull(previous.getConsumedAt());
+        verify(pairingRepo).save(previous);
+        verify(pairingRepo, times(2)).save(any(PosPairingCode.class));
+    }
+
+    @Test
     void pairingCodeIsOneTimeAndSessionTokenIsStoredOnlyAsHash() throws Exception {
         UUID ownerId = UUID.randomUUID();
         PosTerminal terminal = terminal(ownerId);
@@ -141,14 +168,26 @@ class PosTerminalSessionServiceTest {
         PosTerminalLookupRepository terminalRepo = mock(PosTerminalLookupRepository.class);
         PosPairingCodeRepository pairingRepo = mock(PosPairingCodeRepository.class);
         PosTerminalSessionRepository sessionRepo = mock(PosTerminalSessionRepository.class);
+        PosPairingCode pendingCode = PosPairingCode.builder()
+                .id(UUID.randomUUID())
+                .terminal(terminal)
+                .createdByUserId(ownerId)
+                .codeHash("pending")
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .createdAt(LocalDateTime.now())
+                .build();
+
         when(terminalRepo.findByTerminalCode("WTPOS-TEST")).thenReturn(Optional.of(terminal));
         when(sessionRepo.findAllByTerminalId(terminal.getId())).thenReturn(List.of(active, alreadyRevoked));
+        when(pairingRepo.findAllByTerminalId(terminal.getId())).thenReturn(List.of(pendingCode));
 
         PosTerminalSessionService service = service(terminalRepo, pairingRepo, sessionRepo);
         PosSessionDtos.RevokeSessionsResponse response = service.revokeAll(ownerId, "WTPOS-TEST");
 
         assertEquals(1, response.revokedSessions());
         assertNotNull(active.getRevokedAt());
+        assertNotNull(pendingCode.getConsumedAt());
+        verify(pairingRepo).save(pendingCode);
         verify(sessionRepo, times(1)).save(active);
         verify(sessionRepo, never()).save(alreadyRevoked);
     }
