@@ -43,6 +43,7 @@ public class PosTerminalSessionService {
     public PosSessionDtos.PairingCodeResponse createPairingCode(UUID ownerUserId, String terminalCode) {
         PosTerminal terminal = requireOwnedTerminal(ownerUserId, terminalCode);
         LocalDateTime now = LocalDateTime.now();
+        invalidateOutstandingPairingCodes(terminal, now);
         String pairingCode = generatePairingCode();
         LocalDateTime expiresAt = now.plusSeconds(pairingCodeTtlSeconds);
 
@@ -125,6 +126,8 @@ public class PosTerminalSessionService {
         LocalDateTime now = LocalDateTime.now();
         int revoked = 0;
 
+        invalidateOutstandingPairingCodes(terminal, now);
+
         for (PosTerminalSession session : sessionRepository.findAllByTerminalId(terminal.getId())) {
             if (session.getRevokedAt() == null) {
                 session.setRevokedAt(now);
@@ -134,6 +137,17 @@ public class PosTerminalSessionService {
         }
 
         return new PosSessionDtos.RevokeSessionsResponse(terminal.getTerminalCode(), revoked);
+    }
+
+    private void invalidateOutstandingPairingCodes(PosTerminal terminal, LocalDateTime now) {
+        for (PosPairingCode code : pairingCodeRepository.findAllByTerminalId(terminal.getId())) {
+            if (code.getConsumedAt() == null
+                    && code.getExpiresAt() != null
+                    && !code.getExpiresAt().isBefore(now)) {
+                code.setConsumedAt(now);
+                pairingCodeRepository.save(code);
+            }
+        }
     }
 
     private PosTerminal requireOwnedTerminal(UUID ownerUserId, String terminalCode) {
