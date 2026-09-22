@@ -2,6 +2,7 @@ package com.wavetransakt.auth.service;
 
 import com.wavetransakt.auth.dto.AuthResponse;
 import com.wavetransakt.auth.dto.LoginOtpRequest;
+import com.wavetransakt.common.NigerianPhoneNumber;
 import com.wavetransakt.identity.provider.DojahGovernmentIdentityClient;
 import com.wavetransakt.security.JwtService;
 import com.wavetransakt.security.ratelimit.RateLimitGuard;
@@ -52,7 +53,7 @@ public class AuthService {
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
-        String phone = request.getPhone().trim();
+        String phone = NigerianPhoneNumber.toLocal(request.getPhone());
         String bvn = request.getBvn().trim();
         String nin = request.getNin().trim();
 
@@ -322,8 +323,16 @@ public class AuthService {
         }
 
         String raw = identifier.trim();
-        return userRepository.findByEmail(raw.toLowerCase(Locale.ROOT))
-                .orElseGet(() -> userRepository.findByPhone(raw).orElse(null));
+        User byEmail = userRepository
+                .findByEmail(raw.toLowerCase(Locale.ROOT))
+                .orElse(null);
+        if (byEmail != null) {
+            return byEmail;
+        }
+
+        return NigerianPhoneNumber.tryToLocal(raw)
+                .flatMap(userRepository::findByPhone)
+                .orElse(null);
     }
 
     private void recordLoginFailure(String loginSubject) {
