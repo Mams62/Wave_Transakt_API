@@ -330,9 +330,9 @@ public class AuthService {
             return byEmail;
         }
 
-        return NigerianPhoneNumber.tryToLocal(raw)
-                .flatMap(userRepository::findByPhone)
-                .orElse(null);
+        String phoneLookup = NigerianPhoneNumber.tryToLocal(raw)
+                .orElse(raw);
+        return userRepository.findByPhone(phoneLookup).orElse(null);
     }
 
     private void recordLoginFailure(String loginSubject) {
