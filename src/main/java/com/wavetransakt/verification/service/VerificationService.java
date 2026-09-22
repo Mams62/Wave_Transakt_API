@@ -117,8 +117,9 @@ public class VerificationService {
         Optional<User> userOptional = userRepository
                 .findByEmail(raw.toLowerCase(Locale.ROOT));
         if (userOptional.isEmpty()) {
-            userOptional = NigerianPhoneNumber.tryToLocal(raw)
-                    .flatMap(userRepository::findByPhone);
+            String phoneLookup = NigerianPhoneNumber.tryToLocal(raw)
+                    .orElse(raw);
+            userOptional = userRepository.findByPhone(phoneLookup);
         }
 
         if (userOptional.isEmpty()) {
