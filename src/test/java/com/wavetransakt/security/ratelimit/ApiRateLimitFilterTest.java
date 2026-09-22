@@ -125,6 +125,32 @@ class ApiRateLimitFilterTest {
     }
 
     @Test
+    void posPairingRedeemUsesSourceScopedPolicy() throws Exception {
+        when(rateLimitService.consume(
+                eq("POS_PAIRING_REDEEM_SOURCE"),
+                eq("SOURCE:203.0.113.20"),
+                eq(30),
+                eq(Duration.ofMinutes(5))
+        )).thenReturn(allowed(30, 29));
+
+        ApiRateLimitFilter filter = new ApiRateLimitFilter(rateLimitService, true);
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/pos/pairing/redeem");
+        request.setRemoteAddr("203.0.113.20");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicBoolean invoked = new AtomicBoolean(false);
+
+        filter.doFilter(request, response, (req, res) -> invoked.set(true));
+
+        assertTrue(invoked.get());
+        verify(rateLimitService).consume(
+                "POS_PAIRING_REDEEM_SOURCE",
+                "SOURCE:203.0.113.20",
+                30,
+                Duration.ofMinutes(5)
+        );
+    }
+
+    @Test
     void authenticatedFinancialWriteUsesUserScopedPolicy() throws Exception {
         UUID userId = UUID.randomUUID();
         User user = User.builder().id(userId).build();
