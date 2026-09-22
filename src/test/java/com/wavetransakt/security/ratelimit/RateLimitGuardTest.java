@@ -18,11 +18,14 @@ class RateLimitGuardTest {
     DistributedRateLimitService rateLimitService;
 
     @Test
-    void canonicalIdentifierNormalizesEmailButPreservesPhone() {
+    void canonicalIdentifierNormalizesEmailAndNigerianPhoneAliases() {
         RateLimitGuard guard = new RateLimitGuard(rateLimitService);
 
         assertEquals("person@example.com", guard.canonicalIdentifier(" Person@Example.COM "));
         assertEquals("08012345678", guard.canonicalIdentifier(" 08012345678 "));
+        assertEquals("08012345678", guard.canonicalIdentifier("+2348012345678"));
+        assertEquals("08012345678", guard.canonicalIdentifier("2348012345678"));
+        assertEquals("08012345678", guard.canonicalIdentifier("8012345678"));
         assertEquals("MISSING", guard.canonicalIdentifier("  "));
     }
 

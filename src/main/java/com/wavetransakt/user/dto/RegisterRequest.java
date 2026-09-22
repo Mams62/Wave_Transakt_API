@@ -30,8 +30,8 @@ public class RegisterRequest {
 
     @NotBlank(message = "Phone number is required")
     @Pattern(
-            regexp = "^\\+?[0-9]{10,15}$",
-            message = "Invalid phone number"
+            regexp = "^(?:0[0-9]{10}|\\+?234[0-9]{10}|[0-9]{10})$",
+            message = "Enter a valid Nigerian phone number"
     )
     private String phone;
 

@@ -1,5 +1,6 @@
 package com.wavetransakt.qr.service;
 
+import com.wavetransakt.common.NigerianPhoneNumber;
 import com.wavetransakt.qr.dto.WalletQrResponse;
 import com.wavetransakt.user.entity.User;
 import com.wavetransakt.user.repository.UserRepository;
@@ -251,6 +252,6 @@ public class WalletQrService {
             );
         }
 
-        return walletNumber.trim();
+        return NigerianPhoneNumber.toLocal(walletNumber);
     }
 }

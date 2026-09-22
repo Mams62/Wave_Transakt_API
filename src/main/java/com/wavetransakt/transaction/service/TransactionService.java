@@ -1,5 +1,6 @@
 package com.wavetransakt.transaction.service;
 
+import com.wavetransakt.common.NigerianPhoneNumber;
 import com.wavetransakt.ledger.service.LedgerService;
 import com.wavetransakt.transaction.dto.TransactionResponse;
 import com.wavetransakt.transaction.dto.TransferRequest;
@@ -542,7 +543,7 @@ public class TransactionService {
             );
         }
 
-        return walletNumber.trim();
+        return NigerianPhoneNumber.toLocal(walletNumber);
     }
 
     /**

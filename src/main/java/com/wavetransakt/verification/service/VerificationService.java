@@ -1,5 +1,6 @@
 package com.wavetransakt.verification.service;
 
+import com.wavetransakt.common.NigerianPhoneNumber;
 import com.wavetransakt.user.entity.AccountStatus;
 import com.wavetransakt.user.entity.User;
 import com.wavetransakt.user.repository.UserRepository;
@@ -116,7 +117,9 @@ public class VerificationService {
         Optional<User> userOptional = userRepository
                 .findByEmail(raw.toLowerCase(Locale.ROOT));
         if (userOptional.isEmpty()) {
-            userOptional = userRepository.findByPhone(raw);
+            String phoneLookup = NigerianPhoneNumber.tryToLocal(raw)
+                    .orElse(raw);
+            userOptional = userRepository.findByPhone(phoneLookup);
         }
 
         if (userOptional.isEmpty()) {

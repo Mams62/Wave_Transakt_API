@@ -26,10 +26,11 @@ public class Wallet {
     private User user;
 
     /**
-     * Stable Wave Transakt internal wallet identifier.
+     * Stable Wave Transakt customer-facing account identifier.
      *
-     * This value is intentionally kept separate from the bank account number so
-     * QR/payment addresses do not change if the external provider changes.
+     * This is the account holder's canonical Nigerian phone number (0XXXXXXXXXX).
+     * It stays separate from any provider-issued bank/DVA account number so the
+     * Wave identity does not change if the external provider changes.
      */
     @Column(nullable = false, unique = true, length = 20)
     private String walletNumber;

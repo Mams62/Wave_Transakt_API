@@ -3,6 +3,7 @@ package com.wavetransakt.auth.service;
 import com.wavetransakt.auth.dto.ForgotPasswordRequest;
 import com.wavetransakt.auth.dto.ResetPasswordRequest;
 import com.wavetransakt.auth.entity.PasswordResetToken;
+import com.wavetransakt.common.NigerianPhoneNumber;
 import com.wavetransakt.auth.repository.PasswordResetTokenRepository;
 import com.wavetransakt.user.entity.User;
 import com.wavetransakt.user.repository.UserRepository;
@@ -107,7 +108,12 @@ public class PasswordResetService {
         }
         String value = identifier.trim();
         Optional<User> byEmail = userRepository.findByEmail(value.toLowerCase(Locale.ROOT));
-        return byEmail.isPresent() ? byEmail : userRepository.findByPhone(value);
+        if (byEmail.isPresent()) {
+            return byEmail;
+        }
+        String phoneLookup = NigerianPhoneNumber.tryToLocal(value)
+                .orElse(value);
+        return userRepository.findByPhone(phoneLookup);
     }
 
     private String generateCode() {
