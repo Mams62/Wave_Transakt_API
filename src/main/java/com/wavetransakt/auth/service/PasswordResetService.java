@@ -111,8 +111,9 @@ public class PasswordResetService {
         if (byEmail.isPresent()) {
             return byEmail;
         }
-        return NigerianPhoneNumber.tryToLocal(value)
-                .flatMap(userRepository::findByPhone);
+        String phoneLookup = NigerianPhoneNumber.tryToLocal(value)
+                .orElse(value);
+        return userRepository.findByPhone(phoneLookup);
     }
 
     private String generateCode() {
