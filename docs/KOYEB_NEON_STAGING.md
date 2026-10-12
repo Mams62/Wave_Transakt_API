@@ -11,8 +11,9 @@ This guide creates a separate staging deployment. It does not replace, migrate, 
 - Database project: `wave-transakt-staging-alt` (PostgreSQL 17, Frankfurt region)
 - Database name: `wave_transakt_staging`
 - Database role: `wave_transakt`
+- Neon pooled endpoint host: `ep-silent-poetry-b9ho58q5-pooler.c-7.eu-central-1.aws.neon.tech`
 
-The Neon project is a new, empty staging database. Flyway is enabled; the API will attempt to apply its migrations at startup. Review the Koyeb build/runtime logs and verify the health endpoint before pointing any app build at it.
+The Neon project is a new, empty staging database. A read-only `SELECT` test successfully connected to the database using the `wave_transakt` role. Flyway is enabled; the API will attempt to apply its migrations at startup. Review the Koyeb build/runtime logs and verify the health endpoint before pointing any app build at it.
 
 ## Deploy the API to Koyeb
 
@@ -25,11 +26,11 @@ The Neon project is a new, empty staging database. Flyway is enabled; the API wi
 
 ## Required environment variables
 
-Use the pooled Neon endpoint for normal application traffic. Copy the pooled endpoint host from the Neon Console's connection details. Do not include the database password in the JDBC URL; set it separately.
+The Neon pooled endpoint has already been enabled for normal application traffic. Do not include the database password in the JDBC URL; set it separately.
 
-- `WAVE_DB_URL=jdbc:postgresql://<NEON_POOLED_HOST>/wave_transakt_staging?sslmode=require`
-- `WAVE_DB_USERNAME=wave_transakt` (or the exact role shown by Neon)
-- `WAVE_DB_PASSWORD=<Neon role password>` (secret)
+- `WAVE_DB_URL=jdbc:postgresql://ep-silent-poetry-b9ho58q5-pooler.c-7.eu-central-1.aws.neon.tech/wave_transakt_staging?sslmode=require`
+- `WAVE_DB_USERNAME=wave_transakt`
+- `WAVE_DB_PASSWORD=<Neon role password>` (secret; copy from Neon Console connection details)
 - `WAVE_JWT_SECRET=<fresh random secret, at least 32 random bytes>` (secret)
 - `WAVE_JWT_EXPIRATION=86400000`
 - `PORT=8080`
