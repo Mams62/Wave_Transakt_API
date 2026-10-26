@@ -46,7 +46,7 @@ public class PremblyGovernmentIdentityClient implements GovernmentIdentityLookup
 
     @Override
     public IdentityRecord lookupBvn(String bvn) {
-        return verify("BVN", "/verification/bvn", "number", bvn);
+        return verify("BVN", "/verification/bvn_validation", "number", bvn);
     }
 
     @Override
