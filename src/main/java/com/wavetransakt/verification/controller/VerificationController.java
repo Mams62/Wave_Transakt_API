@@ -1,6 +1,7 @@
 package com.wavetransakt.verification.controller;
 
 import com.wavetransakt.security.ratelimit.RateLimitGuard;
+import com.wavetransakt.verification.service.EmailOtpSender;
 import com.wavetransakt.verification.service.VerificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,6 +17,7 @@ import java.util.Locale;
 public class VerificationController {
 
     private final VerificationService verificationService;
+    private final EmailOtpSender emailOtpSender;
     private final RateLimitGuard rateLimitGuard;
 
     @Value("${wave.demo.return-verification-code:false}")
@@ -66,11 +68,19 @@ public class VerificationController {
                 Duration.ofMinutes(15)
         );
 
+        // Apply an identical service-unavailable outcome to every identifier
+        // when email sending is offline: no account-enumeration side channel.
+        if (!emailOtpSender.isConfigured()) {
+            throw new IllegalStateException("Email verification delivery is not configured");
+        }
         String code = verificationService.resendEmailVerification(email);
+        if (code != null) {
+            emailOtpSender.sendVerificationCode(email, code);
+        }
 
         return ResponseEntity.ok(
                 new VerificationResponse(
-                        "If the account exists and still requires email verification, a new verification code has been created.",
+                        "If the account exists and still requires email verification, a code has been sent.",
                         returnVerificationCode && code != null ? code : null
                 )
         );

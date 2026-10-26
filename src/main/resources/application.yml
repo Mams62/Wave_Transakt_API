@@ -7,6 +7,15 @@ spring:
     username: ${WAVE_DB_USERNAME:postgres}
     password: ${WAVE_DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      # Rotate sessions well before hosted Pg proxies close idle sockets.
+      # Staging only: override through Render/Railway environment if measured.
+      maximum-pool-size: ${WAVE_DB_POOL_MAX_SIZE:4}
+      minimum-idle: ${WAVE_DB_POOL_MIN_IDLE:0}
+      max-lifetime: ${WAVE_DB_POOL_MAX_LIFETIME_MS:240000}
+      idle-timeout: ${WAVE_DB_POOL_IDLE_TIMEOUT_MS:120000}
+      connection-timeout: ${WAVE_DB_POOL_CONNECTION_TIMEOUT_MS:12000}
+      validation-timeout: ${WAVE_DB_POOL_VALIDATION_TIMEOUT_MS:5000}
 
   jpa:
     hibernate:
@@ -122,6 +131,15 @@ wave:
       download-url: ${WAVE_ANDROID_DOWNLOAD_URL:}
       force-update: ${WAVE_ANDROID_FORCE_UPDATE:false}
       release-notes: ${WAVE_ANDROID_RELEASE_NOTES:}
+
+  email:
+    from: ${WAVE_EMAIL_FROM:}
+    smtp:
+      host: ${WAVE_EMAIL_SMTP_HOST:}
+      port: ${WAVE_EMAIL_SMTP_PORT:587}
+      username: ${WAVE_EMAIL_SMTP_USERNAME:}
+      password: ${WAVE_EMAIL_SMTP_PASSWORD:}
+      starttls: ${WAVE_EMAIL_SMTP_STARTTLS:true}
 
   sms:
     # Termii-compatible messaging endpoint. BASE URL must come from the SMS

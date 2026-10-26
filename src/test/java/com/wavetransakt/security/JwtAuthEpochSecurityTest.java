@@ -106,6 +106,38 @@ class JwtAuthEpochSecurityTest {
         assertSame(user, SecurityContextHolder.getContext().getAuthentication().getPrincipal());
     }
 
+    @Test
+    void authenticationFilterRejectsUnexpectedSignedAccessScope() throws Exception {
+        JwtService jwtService = jwtService();
+        UserRepository userRepository = mock(UserRepository.class);
+        UUID userId = UUID.randomUUID();
+        User user = activeUser(userId, 3L);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        SecretKey signingKey = Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
+        Date now = new Date();
+        String unexpectedScopeToken = Jwts.builder()
+                .subject(userId.toString())
+                .claim("email", user.getEmail())
+                .claim("access", "UNRECOGNIZED")
+                .claim("ver", 3L)
+                .issuedAt(now)
+                .expiration(new Date(now.getTime() + 60_000L))
+                .signWith(signingKey)
+                .compact();
+
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jwtService, userRepository);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer " + unexpectedScopeToken);
+        filter.doFilterInternal(
+                request,
+                new MockHttpServletResponse(),
+                new MockFilterChain()
+        );
+
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+    }
+
     private JwtService jwtService() {
         return new JwtService(SECRET, 60_000L, 30_000L);
     }

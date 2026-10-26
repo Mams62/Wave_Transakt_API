@@ -30,6 +30,11 @@ public class LivenessService {
     @Value("${wave.identity.liveness.webhook-secret:}") private String webhookSecret;
     @Value("${wave.identity.liveness.provider-configured:false}") private boolean providerConfigured;
 
+    /** True only when liveness is enabled and provider credentials exist. */
+    public boolean isReadyForEnrollment() {
+        return providerConfigured && dojahLivenessClient.isConfigured();
+    }
+
     @Transactional
     public LivenessSessionResponse start(User user, String purpose) {
         String normalizedPurpose = purpose == null || purpose.isBlank() ? "LOGIN" : purpose.trim().toUpperCase(Locale.ROOT);

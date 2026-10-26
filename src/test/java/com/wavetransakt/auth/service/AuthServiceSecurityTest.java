@@ -2,6 +2,8 @@ package com.wavetransakt.auth.service;
 
 import com.wavetransakt.auth.dto.LoginOtpRequest;
 import com.wavetransakt.identity.provider.DojahGovernmentIdentityClient;
+import com.wavetransakt.identity.service.LivenessService;
+import com.wavetransakt.user.dto.RegisterRequest;
 import com.wavetransakt.security.JwtService;
 import com.wavetransakt.security.ratelimit.RateLimitExceededException;
 import com.wavetransakt.security.ratelimit.RateLimitGuard;
@@ -9,6 +11,7 @@ import com.wavetransakt.user.dto.LoginRequest;
 import com.wavetransakt.user.entity.AccountStatus;
 import com.wavetransakt.user.entity.User;
 import com.wavetransakt.user.repository.UserRepository;
+import com.wavetransakt.verification.service.EmailOtpSender;
 import com.wavetransakt.verification.service.SmsOtpSender;
 import com.wavetransakt.verification.service.VerificationService;
 import com.wavetransakt.wallet.service.WalletService;
@@ -35,8 +38,10 @@ class AuthServiceSecurityTest {
     @Mock WalletService walletService;
     @Mock VerificationService verificationService;
     @Mock SmsOtpSender smsOtpSender;
+    @Mock EmailOtpSender emailOtpSender;
     @Mock FaceLoginChallengeService faceLoginChallengeService;
     @Mock DojahGovernmentIdentityClient governmentIdentityClient;
+    @Mock LivenessService livenessService;
     @Mock JwtService jwtService;
     @Mock RateLimitGuard rateLimitGuard;
 
@@ -232,6 +237,22 @@ class AuthServiceSecurityTest {
         );
     }
 
+    @Test
+    void rejectsRegistrationWithoutProvidersBeforeAnyIdentityLookupOrAccountWrite() {
+        IllegalStateException failure = assertThrows(
+                IllegalStateException.class,
+                () -> service().register(new RegisterRequest())
+        );
+        assertEquals(
+                "Secure account registration is unavailable until government identity, email, SMS OTP and live-face verification are configured.",
+                failure.getMessage()
+        );
+        verify(governmentIdentityClient).isConfigured();
+        verify(governmentIdentityClient, never()).lookupBvn(anyString());
+        verify(governmentIdentityClient, never()).lookupNin(anyString());
+        verifyNoInteractions(walletService, verificationService, emailOtpSender);
+    }
+
     private AuthService service() {
         return new AuthService(
                 userRepository,
@@ -239,8 +260,10 @@ class AuthServiceSecurityTest {
                 walletService,
                 verificationService,
                 smsOtpSender,
+                emailOtpSender,
                 faceLoginChallengeService,
                 governmentIdentityClient,
+                livenessService,
                 jwtService,
                 rateLimitGuard
         );

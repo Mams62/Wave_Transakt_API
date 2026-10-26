@@ -4,12 +4,14 @@ import com.wavetransakt.auth.dto.AuthResponse;
 import com.wavetransakt.auth.dto.LoginOtpRequest;
 import com.wavetransakt.common.NigerianPhoneNumber;
 import com.wavetransakt.identity.provider.DojahGovernmentIdentityClient;
+import com.wavetransakt.identity.service.LivenessService;
 import com.wavetransakt.security.JwtService;
 import com.wavetransakt.security.ratelimit.RateLimitGuard;
 import com.wavetransakt.user.dto.LoginRequest;
 import com.wavetransakt.user.dto.RegisterRequest;
 import com.wavetransakt.user.entity.User;
 import com.wavetransakt.user.repository.UserRepository;
+import com.wavetransakt.verification.service.EmailOtpSender;
 import com.wavetransakt.verification.service.SmsOtpSender;
 import com.wavetransakt.verification.service.VerificationService;
 import com.wavetransakt.wallet.service.WalletService;
@@ -42,8 +44,10 @@ public class AuthService {
     private final WalletService walletService;
     private final VerificationService verificationService;
     private final SmsOtpSender smsOtpSender;
+    private final EmailOtpSender emailOtpSender;
     private final FaceLoginChallengeService faceLoginChallengeService;
     private final DojahGovernmentIdentityClient governmentIdentityClient;
+    private final LivenessService livenessService;
     private final JwtService jwtService;
     private final RateLimitGuard rateLimitGuard;
 
@@ -52,6 +56,18 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
+        // All required identity and delivery dependencies must be configured
+        // before performing billable BVN/NIN lookups or creating user/wallet
+        // records. The Android preflight is advisory; this is authoritative.
+        if (!governmentIdentityClient.isConfigured() ||
+                !emailOtpSender.isConfigured() ||
+                !smsOtpSender.isConfigured() ||
+                !livenessService.isReadyForEnrollment()) {
+            throw new IllegalStateException(
+                    "Secure account registration is unavailable until government " +
+                    "identity, email, SMS OTP and live-face verification are configured."
+            );
+        }
         String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
         String phone = NigerianPhoneNumber.toLocal(request.getPhone());
         String bvn = request.getBvn().trim();
@@ -91,9 +107,10 @@ public class AuthService {
         walletService.createWallet(user);
 
         String verificationCode = verificationService.createEmailVerificationCode(user);
+        emailOtpSender.sendVerificationCode(email, verificationCode);
 
         return AuthResponse.builder()
-                .message("Identity verified. Registration successful. Please verify your email.")
+                .message("Identity verified. A verification code was sent to your email.")
                 .verificationCode(returnVerificationCode ? verificationCode : null)
                 .requiresOtp(false)
                 .faceVerificationRequired(false)
