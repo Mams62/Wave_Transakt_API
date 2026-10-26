@@ -164,11 +164,7 @@ public class VtpassCatalogClient {
     }
 
     private String normalizedBaseUrl() {
-        String value = baseUrl == null ? "" : baseUrl.trim();
-        if (!value.startsWith("https://")) {
-            throw new IllegalStateException("VTpass base URL must use HTTPS");
-        }
-        return value.endsWith("/") ? value : value + "/";
+        return VtpassHostPolicy.approvedBaseUrl(baseUrl);
     }
 
     private String safeToken(String value, String field) {
