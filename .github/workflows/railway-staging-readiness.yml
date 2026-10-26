@@ -43,3 +43,5 @@ jobs:
             fi
             echo "PASS: $path blocks unauthenticated requests (HTTP $status)"
           done
+
+# Recheck after backend identity-preflight deployment (2026-10-26).
