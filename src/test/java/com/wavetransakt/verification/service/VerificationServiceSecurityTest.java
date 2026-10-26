@@ -35,6 +35,9 @@ class VerificationServiceSecurityTest {
     @Mock
     PasswordEncoder passwordEncoder;
 
+    @Mock
+    EmailOtpSender emailOtpSender;
+
     @Test
     void newlyIssuedCodeIsHashedAndPlaintextIsNeverPersisted() {
         User user = User.builder().email("person@example.com").build();
@@ -246,7 +249,8 @@ class VerificationServiceSecurityTest {
         return new VerificationService(
                 verificationCodeRepository,
                 userRepository,
-                passwordEncoder
+                passwordEncoder,
+                emailOtpSender
         );
     }
 

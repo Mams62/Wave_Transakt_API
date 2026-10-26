@@ -7,6 +7,15 @@ spring:
     username: ${WAVE_DB_USERNAME:postgres}
     password: ${WAVE_DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      # Rotate sessions well before hosted Pg proxies close idle sockets.
+      # Staging only: override through Render/Railway environment if measured.
+      maximum-pool-size: ${WAVE_DB_POOL_MAX_SIZE:4}
+      minimum-idle: ${WAVE_DB_POOL_MIN_IDLE:0}
+      max-lifetime: ${WAVE_DB_POOL_MAX_LIFETIME_MS:240000}
+      idle-timeout: ${WAVE_DB_POOL_IDLE_TIMEOUT_MS:120000}
+      connection-timeout: ${WAVE_DB_POOL_CONNECTION_TIMEOUT_MS:12000}
+      validation-timeout: ${WAVE_DB_POOL_VALIDATION_TIMEOUT_MS:5000}
 
   jpa:
     hibernate:
@@ -123,9 +132,15 @@ wave:
       force-update: ${WAVE_ANDROID_FORCE_UPDATE:false}
       release-notes: ${WAVE_ANDROID_RELEASE_NOTES:}
 
+  email:
+    # Resend HTTPS email API. Requires a sender domain verified with the
+    # provider before codes can reach customer addresses. No key in source.
+    api-key: ${WAVE_EMAIL_API_KEY:}
+    from: ${WAVE_EMAIL_FROM:}
+
   sms:
     # Termii-compatible messaging endpoint. BASE URL must come from the SMS
-    # provider dashboard and credentials must stay only in Render.
+    # provider dashboard and credentials stay only in the hosting secret store.
     base-url: ${WAVE_SMS_BASE_URL:}
     api-key: ${WAVE_SMS_API_KEY:}
     sender-id: ${WAVE_SMS_SENDER_ID:WavePay}
