@@ -1,7 +1,10 @@
 package com.wavetransakt.auth.controller;
 
 import com.wavetransakt.identity.provider.DojahGovernmentIdentityClient;
+import com.wavetransakt.verification.service.EmailOtpSender;
+import com.wavetransakt.verification.service.SmsOtpSender;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -10,29 +13,38 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 
 /**
- * Preflight for registration, before the phone submits BVN/NIN.
- *
- * This reports only whether provider configuration exists; it does not claim
- * that the provider credentials are authorized or that onboarding succeeded.
- * Never include secrets, identity numbers, or upstream error details.
+ * Returns only the configuration state of dependencies required by onboarding.
+ * It is not a statement of live provider authorization or email/SMS delivery.
  */
 @RestController
 @RequiredArgsConstructor
 public class RegistrationAvailabilityController {
 
     private final DojahGovernmentIdentityClient identityProvider;
+    private final EmailOtpSender emailOtpSender;
+    private final SmsOtpSender smsOtpSender;
+
+    @Value("${wave.identity.liveness.provider-configured:false}")
+    private boolean livenessConfigured;
 
     @GetMapping("/api/auth/registration/availability")
     public ResponseEntity<Map<String, Object>> availability() {
-        boolean configured = identityProvider.isConfigured();
+        boolean identity = identityProvider.isConfigured();
+        boolean email = emailOtpSender.isConfigured();
+        boolean sms = smsOtpSender.isConfigured();
+        boolean face = livenessConfigured && identity;
+        boolean ready = identity && email && sms && face;
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .body(Map.of(
-                        "identityProviderConfigured", configured,
-                        "registrationSubmissionAllowed", configured,
-                        "message", configured
-                                ? "Identity verification is configured. BVN and NIN will be verified before registration."
-                                : "Account registration is temporarily unavailable while BVN/NIN verification is being connected. Please try again once verification is available."
+                        "identityProviderConfigured", identity,
+                        "emailDeliveryConfigured", email,
+                        "smsDeliveryConfigured", sms,
+                        "faceVerificationConfigured", face,
+                        "registrationSubmissionAllowed", ready,
+                        "message", ready
+                                ? "Registration dependencies are configured. Identity, email, phone and live-face checks still must succeed."
+                                : "Secure account registration is paused until government identity, email, SMS and face verification providers are configured."
                 ));
     }
 }
