@@ -6,9 +6,11 @@ import com.wavetransakt.security.JwtService;
 import com.wavetransakt.security.ratelimit.RateLimitExceededException;
 import com.wavetransakt.security.ratelimit.RateLimitGuard;
 import com.wavetransakt.user.dto.LoginRequest;
+import com.wavetransakt.user.dto.RegisterRequest;
 import com.wavetransakt.user.entity.AccountStatus;
 import com.wavetransakt.user.entity.User;
 import com.wavetransakt.user.repository.UserRepository;
+import com.wavetransakt.verification.service.EmailOtpSender;
 import com.wavetransakt.verification.service.SmsOtpSender;
 import com.wavetransakt.verification.service.VerificationService;
 import com.wavetransakt.wallet.service.WalletService;
@@ -24,6 +26,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
@@ -35,6 +38,7 @@ class AuthServiceSecurityTest {
     @Mock WalletService walletService;
     @Mock VerificationService verificationService;
     @Mock SmsOtpSender smsOtpSender;
+    @Mock EmailOtpSender emailOtpSender;
     @Mock FaceLoginChallengeService faceLoginChallengeService;
     @Mock DojahGovernmentIdentityClient governmentIdentityClient;
     @Mock JwtService jwtService;
@@ -232,6 +236,19 @@ class AuthServiceSecurityTest {
         );
     }
 
+    @Test
+    void registrationStopsBeforeGovernmentLookupsWhenDeliveryAndFaceFactorsMissing() {
+        AuthService service = service();
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
+                () -> service.register(new RegisterRequest())
+        );
+        assertTrue(error.getMessage().contains("temporarily unavailable"));
+        verify(governmentIdentityClient, never()).lookupBvn(anyString());
+        verify(governmentIdentityClient, never()).lookupNin(anyString());
+        verifyNoInteractions(userRepository, walletService);
+    }
+
     private AuthService service() {
         return new AuthService(
                 userRepository,
@@ -239,6 +256,7 @@ class AuthServiceSecurityTest {
                 walletService,
                 verificationService,
                 smsOtpSender,
+                emailOtpSender,
                 faceLoginChallengeService,
                 governmentIdentityClient,
                 jwtService,

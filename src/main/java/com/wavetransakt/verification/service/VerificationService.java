@@ -31,6 +31,7 @@ public class VerificationService {
     private final VerificationCodeRepository verificationCodeRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final EmailOtpSender emailOtpSender;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -48,7 +49,11 @@ public class VerificationService {
 
     @Transactional
     public String createEmailVerificationCode(User user) {
-        return createCode(user, VerificationType.EMAIL);
+        // Registration is transactional: a delivery failure must prevent
+        // account activation and roll back a newly generated code.
+        String code = createCode(user, VerificationType.EMAIL);
+        emailOtpSender.sendVerificationCode(user.getEmail(), code);
+        return code;
     }
 
     @Transactional
