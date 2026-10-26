@@ -150,6 +150,12 @@ wave:
     channel: ${WAVE_SMS_CHANNEL:dnd}
 
   identity:
+    # Explicit provider selection. With DISABLED (default), no BVN/NIN lookup
+    # can be performed and account registration stays unavailable.
+    government:
+      provider: ${WAVE_GOVERNMENT_IDENTITY_PROVIDER:DISABLED}
+    prembly:
+      api-key: ${WAVE_PREMBLY_API_KEY:}
     liveness:
       provider: ${WAVE_LIVENESS_PROVIDER:DOJAH}
       provider-configured: ${WAVE_LIVENESS_PROVIDER_CONFIGURED:false}

@@ -1,6 +1,6 @@
 package com.wavetransakt.auth.controller;
 
-import com.wavetransakt.identity.provider.DojahGovernmentIdentityClient;
+import com.wavetransakt.identity.provider.GovernmentIdentityLookup;
 import com.wavetransakt.identity.service.LivenessService;
 import com.wavetransakt.verification.service.EmailOtpSender;
 import com.wavetransakt.verification.service.SmsOtpSender;
@@ -17,7 +17,7 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class RegistrationAvailabilityControllerTest {
-    @Mock DojahGovernmentIdentityClient governmentIdentity;
+    @Mock GovernmentIdentityLookup governmentIdentity;
     @Mock EmailOtpSender emailSender;
     @Mock SmsOtpSender smsSender;
     @Mock LivenessService liveness;

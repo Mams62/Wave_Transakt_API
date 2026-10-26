@@ -1,6 +1,6 @@
 package com.wavetransakt.auth.controller;
 
-import com.wavetransakt.identity.provider.DojahGovernmentIdentityClient;
+import com.wavetransakt.identity.provider.GovernmentIdentityLookup;
 import com.wavetransakt.identity.service.LivenessService;
 import com.wavetransakt.verification.service.EmailOtpSender;
 import com.wavetransakt.verification.service.SmsOtpSender;
@@ -21,7 +21,7 @@ import java.util.Map;
 @RestController
 @RequiredArgsConstructor
 public class RegistrationAvailabilityController {
-    private final DojahGovernmentIdentityClient governmentIdentity;
+    private final GovernmentIdentityLookup governmentIdentity;
     private final EmailOtpSender emailSender;
     private final SmsOtpSender smsSender;
     private final LivenessService liveness;

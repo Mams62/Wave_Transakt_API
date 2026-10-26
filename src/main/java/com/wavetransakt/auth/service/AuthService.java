@@ -3,7 +3,7 @@ package com.wavetransakt.auth.service;
 import com.wavetransakt.auth.dto.AuthResponse;
 import com.wavetransakt.auth.dto.LoginOtpRequest;
 import com.wavetransakt.common.NigerianPhoneNumber;
-import com.wavetransakt.identity.provider.DojahGovernmentIdentityClient;
+import com.wavetransakt.identity.provider.GovernmentIdentityLookup;
 import com.wavetransakt.identity.service.LivenessService;
 import com.wavetransakt.security.JwtService;
 import com.wavetransakt.security.ratelimit.RateLimitGuard;
@@ -46,7 +46,7 @@ public class AuthService {
     private final SmsOtpSender smsOtpSender;
     private final EmailOtpSender emailOtpSender;
     private final FaceLoginChallengeService faceLoginChallengeService;
-    private final DojahGovernmentIdentityClient governmentIdentityClient;
+    private final GovernmentIdentityLookup governmentIdentityClient;
     private final LivenessService livenessService;
     private final JwtService jwtService;
     private final RateLimitGuard rateLimitGuard;
@@ -78,8 +78,8 @@ public class AuthService {
         if (userRepository.existsByBvn(bvn)) throw new IllegalArgumentException("BVN already linked to an account");
         if (userRepository.existsByNin(nin)) throw new IllegalArgumentException("NIN already linked to an account");
 
-        DojahGovernmentIdentityClient.IdentityRecord bvnRecord = governmentIdentityClient.lookupBvn(bvn);
-        DojahGovernmentIdentityClient.IdentityRecord ninRecord = governmentIdentityClient.lookupNin(nin);
+        GovernmentIdentityLookup.IdentityRecord bvnRecord = governmentIdentityClient.lookupBvn(bvn);
+        GovernmentIdentityLookup.IdentityRecord ninRecord = governmentIdentityClient.lookupNin(nin);
 
         requireIdentityMatch("BVN", bvnRecord, request);
         requireIdentityMatch("NIN", ninRecord, request);
@@ -253,7 +253,7 @@ public class AuthService {
             );
         }
 
-        DojahGovernmentIdentityClient.IdentityRecord ninRecord = governmentIdentityClient.lookupNin(user.getNin());
+        GovernmentIdentityLookup.IdentityRecord ninRecord = governmentIdentityClient.lookupNin(user.getNin());
 
         if (!sameName(ninRecord.firstName(), user.getFirstName())
                 || !sameName(ninRecord.lastName(), user.getLastName())) {
@@ -279,7 +279,7 @@ public class AuthService {
 
     private void requireIdentityMatch(
             String source,
-            DojahGovernmentIdentityClient.IdentityRecord record,
+            GovernmentIdentityLookup.IdentityRecord record,
             RegisterRequest request
     ) {
         if (!sameName(record.firstName(), request.getFirstName())
@@ -299,8 +299,8 @@ public class AuthService {
     }
 
     private void requireSamePerson(
-            DojahGovernmentIdentityClient.IdentityRecord bvn,
-            DojahGovernmentIdentityClient.IdentityRecord nin
+            GovernmentIdentityLookup.IdentityRecord bvn,
+            GovernmentIdentityLookup.IdentityRecord nin
     ) {
         boolean same = sameName(bvn.firstName(), nin.firstName())
                 && sameName(bvn.lastName(), nin.lastName())

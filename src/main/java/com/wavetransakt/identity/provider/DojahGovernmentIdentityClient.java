@@ -15,7 +15,7 @@ import java.time.format.DateTimeParseException;
  * Raw identifiers and provider identity payloads are never returned to Android.
  */
 @Component
-public class DojahGovernmentIdentityClient {
+public class DojahGovernmentIdentityClient implements GovernmentIdentityLookup {
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
@@ -39,13 +39,13 @@ public class DojahGovernmentIdentityClient {
                 && apiKey != null && !apiKey.isBlank();
     }
 
-    public IdentityRecord lookupBvn(String bvn) {
+    public GovernmentIdentityLookup.IdentityRecord lookupBvn(String bvn) {
         String value = requireElevenDigits(bvn, "BVN");
         String raw = get("/api/v1/kyc/bvn/full", "bvn", value);
         return parseRecord(raw, "BVN");
     }
 
-    public IdentityRecord lookupNin(String nin) {
+    public GovernmentIdentityLookup.IdentityRecord lookupNin(String nin) {
         String value = requireElevenDigits(nin, "NIN");
         String raw = get("/api/v1/kyc/nin", "nin", value);
         return parseRecord(raw, "NIN");
@@ -85,7 +85,7 @@ public class DojahGovernmentIdentityClient {
         }
     }
 
-    private IdentityRecord parseRecord(String raw, String type) {
+    private GovernmentIdentityLookup.IdentityRecord parseRecord(String raw, String type) {
         try {
             JsonNode root = objectMapper.readTree(raw);
             JsonNode entity = root.path("entity");
@@ -104,7 +104,7 @@ public class DojahGovernmentIdentityClient {
                 throw new IllegalStateException("Identity provider response was incomplete");
             }
 
-            return new IdentityRecord(firstName, lastName, middleName, gender, dob, reference);
+            return new GovernmentIdentityLookup.IdentityRecord(firstName, lastName, middleName, gender, dob, reference);
         } catch (IllegalArgumentException | IllegalStateException e) {
             throw e;
         } catch (Exception e) {
@@ -146,12 +146,4 @@ public class DojahGovernmentIdentityClient {
         return slash >= 0 ? value.substring(0, slash) : value;
     }
 
-    public record IdentityRecord(
-            String firstName,
-            String lastName,
-            String middleName,
-            String gender,
-            LocalDate dateOfBirth,
-            String providerReference
-    ) {}
 }

@@ -27,19 +27,23 @@ public class LivenessService {
     private final UserRepository userRepository;
 
     @Value("${wave.identity.liveness.provider:UNCONFIGURED}") private String provider;
+    @Value("${wave.identity.government.provider:DISABLED}") private String governmentProvider;
     @Value("${wave.identity.liveness.webhook-secret:}") private String webhookSecret;
     @Value("${wave.identity.liveness.provider-configured:false}") private boolean providerConfigured;
 
     /** True only when liveness is enabled and provider credentials exist. */
     public boolean isReadyForEnrollment() {
-        return providerConfigured && dojahLivenessClient.isConfigured();
+        return providerConfigured
+                && "DOJAH".equalsIgnoreCase(provider)
+                && "DOJAH".equalsIgnoreCase(governmentProvider)
+                && dojahLivenessClient.isConfigured();
     }
 
     @Transactional
     public LivenessSessionResponse start(User user, String purpose) {
         String normalizedPurpose = purpose == null || purpose.isBlank() ? "LOGIN" : purpose.trim().toUpperCase(Locale.ROOT);
         if (!normalizedPurpose.equals("LOGIN") && !normalizedPurpose.equals("ENROLLMENT")) throw new IllegalArgumentException("Unsupported liveness purpose");
-        boolean ready = providerConfigured && dojahLivenessClient.isConfigured();
+        boolean ready = isReadyForEnrollment();
         LivenessSession session = LivenessSession.builder()
                 .id(UUID.randomUUID()).user(user)
                 .provider(provider == null || provider.isBlank() ? "UNCONFIGURED" : provider.trim())
@@ -54,7 +58,7 @@ public class LivenessService {
     public LivenessCaptureResponse capture(User user, UUID sessionId, String imageBase64) {
         LivenessSession session = repository.findById(sessionId).orElseThrow(() -> new IllegalArgumentException("Liveness session not found"));
         if (!session.getUser().getId().equals(user.getId())) throw new IllegalArgumentException("Liveness session not found");
-        if (!providerConfigured || !dojahLivenessClient.isConfigured()) throw new IllegalStateException("Dojah identity verification is not configured on the server");
+        if (!isReadyForEnrollment()) throw new IllegalStateException("Approved liveness verification is not available");
         if (session.getStatus() == LivenessStatus.VERIFIED) throw new IllegalStateException("Liveness session is already verified");
         if (session.getStatus() == LivenessStatus.REJECTED || session.getStatus() == LivenessStatus.EXPIRED) throw new IllegalStateException("Liveness session is no longer active");
 
@@ -109,13 +113,13 @@ public class LivenessService {
     public LivenessSessionResponse status(User user, UUID sessionId) {
         LivenessSession session = repository.findById(sessionId).orElseThrow(() -> new IllegalArgumentException("Liveness session not found"));
         if (!session.getUser().getId().equals(user.getId())) throw new IllegalArgumentException("Liveness session not found");
-        return LivenessSessionResponse.from(session, providerConfigured && dojahLivenessClient.isConfigured());
+        return LivenessSessionResponse.from(session, isReadyForEnrollment());
     }
 
     @Transactional(readOnly = true)
     public LivenessSessionResponse latest(User user) {
         LivenessSession session = repository.findTopByUserIdOrderByCreatedAtDesc(user.getId()).orElseThrow(() -> new IllegalArgumentException("No liveness session found"));
-        return LivenessSessionResponse.from(session, providerConfigured && dojahLivenessClient.isConfigured());
+        return LivenessSessionResponse.from(session, isReadyForEnrollment());
     }
 
     @Transactional
@@ -125,7 +129,7 @@ public class LivenessService {
         LivenessStatus mappedStatus;
         try { mappedStatus = LivenessStatus.valueOf(status.trim().toUpperCase(Locale.ROOT)); }
         catch (Exception e) { throw new IllegalArgumentException("Invalid liveness status"); }
-        if (mappedStatus == LivenessStatus.VERIFIED && (!providerConfigured || !dojahLivenessClient.isConfigured())) throw new IllegalStateException("Liveness provider is not configured");
+        if (mappedStatus == LivenessStatus.VERIFIED && !isReadyForEnrollment()) throw new IllegalStateException("Liveness provider is not configured");
         session.setProviderSessionId(providerSessionId == null || providerSessionId.isBlank() ? session.getProviderSessionId() : providerSessionId.trim());
         session.setStatus(mappedStatus);
         session.setProviderMessage(message == null ? null : message.trim());

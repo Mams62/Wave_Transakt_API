@@ -1,7 +1,7 @@
 package com.wavetransakt.auth.service;
 
 import com.wavetransakt.auth.dto.LoginOtpRequest;
-import com.wavetransakt.identity.provider.DojahGovernmentIdentityClient;
+import com.wavetransakt.identity.provider.GovernmentIdentityLookup;
 import com.wavetransakt.identity.service.LivenessService;
 import com.wavetransakt.user.dto.RegisterRequest;
 import com.wavetransakt.security.JwtService;
@@ -40,7 +40,7 @@ class AuthServiceSecurityTest {
     @Mock SmsOtpSender smsOtpSender;
     @Mock EmailOtpSender emailOtpSender;
     @Mock FaceLoginChallengeService faceLoginChallengeService;
-    @Mock DojahGovernmentIdentityClient governmentIdentityClient;
+    @Mock GovernmentIdentityLookup governmentIdentityClient;
     @Mock LivenessService livenessService;
     @Mock JwtService jwtService;
     @Mock RateLimitGuard rateLimitGuard;
