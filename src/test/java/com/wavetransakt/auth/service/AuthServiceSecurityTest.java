@@ -2,6 +2,8 @@ package com.wavetransakt.auth.service;
 
 import com.wavetransakt.auth.dto.LoginOtpRequest;
 import com.wavetransakt.identity.provider.DojahGovernmentIdentityClient;
+import com.wavetransakt.identity.service.LivenessService;
+import com.wavetransakt.user.dto.RegisterRequest;
 import com.wavetransakt.security.JwtService;
 import com.wavetransakt.security.ratelimit.RateLimitExceededException;
 import com.wavetransakt.security.ratelimit.RateLimitGuard;
@@ -39,6 +41,7 @@ class AuthServiceSecurityTest {
     @Mock EmailOtpSender emailOtpSender;
     @Mock FaceLoginChallengeService faceLoginChallengeService;
     @Mock DojahGovernmentIdentityClient governmentIdentityClient;
+    @Mock LivenessService livenessService;
     @Mock JwtService jwtService;
     @Mock RateLimitGuard rateLimitGuard;
 
@@ -234,6 +237,22 @@ class AuthServiceSecurityTest {
         );
     }
 
+    @Test
+    void rejectsRegistrationWithoutProvidersBeforeAnyIdentityLookupOrAccountWrite() {
+        IllegalStateException failure = assertThrows(
+                IllegalStateException.class,
+                () -> service().register(new RegisterRequest())
+        );
+        assertEquals(
+                "Secure account registration is unavailable until government identity, email, SMS OTP and live-face verification are configured.",
+                failure.getMessage()
+        );
+        verify(governmentIdentityClient).isConfigured();
+        verify(governmentIdentityClient, never()).lookupBvn(anyString());
+        verify(governmentIdentityClient, never()).lookupNin(anyString());
+        verifyNoInteractions(walletService, verificationService, emailOtpSender);
+    }
+
     private AuthService service() {
         return new AuthService(
                 userRepository,
@@ -244,6 +263,7 @@ class AuthServiceSecurityTest {
                 emailOtpSender,
                 faceLoginChallengeService,
                 governmentIdentityClient,
+                livenessService,
                 jwtService,
                 rateLimitGuard
         );
