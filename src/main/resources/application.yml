@@ -132,6 +132,15 @@ wave:
       force-update: ${WAVE_ANDROID_FORCE_UPDATE:false}
       release-notes: ${WAVE_ANDROID_RELEASE_NOTES:}
 
+  email:
+    from: ${WAVE_EMAIL_FROM:}
+    smtp:
+      host: ${WAVE_EMAIL_SMTP_HOST:}
+      port: ${WAVE_EMAIL_SMTP_PORT:587}
+      username: ${WAVE_EMAIL_SMTP_USERNAME:}
+      password: ${WAVE_EMAIL_SMTP_PASSWORD:}
+      starttls: ${WAVE_EMAIL_SMTP_STARTTLS:true}
+
   sms:
     # Termii-compatible messaging endpoint. BASE URL must come from the SMS
     # provider dashboard and credentials must stay only in Render.
