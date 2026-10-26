@@ -53,6 +53,7 @@ public class SecurityConfig {
                         )
                         .permitAll()
                         .requestMatchers(
+                                "/api/auth/registration/availability",
                                 "/api/auth/register",
                                 "/api/auth/login",
                                 "/api/auth/login/otp",
