@@ -42,10 +42,12 @@ public class VtpassCatalogClient {
         List<Category> result = new ArrayList<>();
         if (content.isArray()) {
             for (JsonNode item : content) {
-                result.add(new Category(
-                        text(item, "identifier"),
-                        text(item, "name")
-                ));
+                String identifier = text(item, "identifier");
+                // Expose only Wave Transakt's supported utility/education
+                // categories. Other provider products require separate review.
+                if (isSupportedCategory(identifier)) {
+                    result.add(new Category(identifier, text(item, "name")));
+                }
             }
         }
         return result;
@@ -53,6 +55,9 @@ public class VtpassCatalogClient {
 
     public List<Provider> getProviders(String identifier) {
         String safeIdentifier = safeToken(identifier, "identifier");
+        if (!isSupportedCategory(safeIdentifier)) {
+            throw new IllegalArgumentException("Unsupported service category");
+        }
         JsonNode root = get("services", "identifier", safeIdentifier);
         JsonNode content = root.path("content");
 
@@ -99,6 +104,15 @@ public class VtpassCatalogClient {
                 firstText(content, "ServiceName", "serviceName"),
                 result
         );
+    }
+
+    static boolean isSupportedCategory(String identifier) {
+        if (identifier == null) return false;
+        return switch (identifier.trim().toLowerCase(Locale.ROOT)) {
+            case "airtime", "data", "electricity-bill",
+                 "tv-subscription", "education" -> true;
+            default -> false;
+        };
     }
 
     private JsonNode get(String path, String queryName, String queryValue) {
@@ -150,11 +164,7 @@ public class VtpassCatalogClient {
     }
 
     private String normalizedBaseUrl() {
-        String value = baseUrl == null ? "" : baseUrl.trim();
-        if (!value.startsWith("https://")) {
-            throw new IllegalStateException("VTpass base URL must use HTTPS");
-        }
-        return value.endsWith("/") ? value : value + "/";
+        return VtpassHostPolicy.approvedBaseUrl(baseUrl);
     }
 
     private String safeToken(String value, String field) {
