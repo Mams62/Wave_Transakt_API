@@ -18,6 +18,9 @@ jobs:
         run: |
           set -uo pipefail
           overall=0
+          # Selected Railway A is the staging release gate. Render Free may
+          # sleep and Railway B is a separate fallback diagnostic only.
+          primary="https://wave-transakt-api-staging-staging-e587.up.railway.app"
           for base in \
             "https://wave-transakt-api-staging.onrender.com" \
             "https://wave-transakt-api-staging-staging-e587.up.railway.app" \
@@ -30,7 +33,7 @@ jobs:
               echo "PASS health: HTTP $status"
             else
               echo "::warning::Health was not UP: HTTP $status"
-              overall=1
+              if [[ "$base" == "$primary" ]]; then overall=1; fi
             fi
             rm -f "$health_body"
 
@@ -42,7 +45,7 @@ jobs:
                 echo "PASS protected $route: HTTP $code"
               else
                 echo "::warning::Unexpected anonymous response on $route: HTTP $code"
-                overall=1
+                if [[ "$base" == "$primary" ]]; then overall=1; fi
               fi
             done
             echo "::endgroup::"
