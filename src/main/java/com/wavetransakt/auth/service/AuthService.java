@@ -10,6 +10,7 @@ import com.wavetransakt.user.dto.LoginRequest;
 import com.wavetransakt.user.dto.RegisterRequest;
 import com.wavetransakt.user.entity.User;
 import com.wavetransakt.user.repository.UserRepository;
+import com.wavetransakt.verification.service.EmailOtpSender;
 import com.wavetransakt.verification.service.SmsOtpSender;
 import com.wavetransakt.verification.service.VerificationService;
 import com.wavetransakt.wallet.service.WalletService;
@@ -42,6 +43,7 @@ public class AuthService {
     private final WalletService walletService;
     private final VerificationService verificationService;
     private final SmsOtpSender smsOtpSender;
+    private final EmailOtpSender emailOtpSender;
     private final FaceLoginChallengeService faceLoginChallengeService;
     private final DojahGovernmentIdentityClient governmentIdentityClient;
     private final JwtService jwtService;
@@ -50,8 +52,24 @@ public class AuthService {
     @Value("${wave.demo.return-verification-code:false}")
     private boolean returnVerificationCode;
 
+    @Value("${wave.identity.liveness.provider-configured:false}")
+    private boolean livenessConfigured;
+
     @Transactional
     public AuthResponse register(RegisterRequest request) {
+        // This guard is enforced server-side, not merely on the Android
+        // registration form. Do not collect billable government lookup results
+        // or create half-verified accounts when any required factor is missing.
+        if (!governmentIdentityClient.isConfigured() ||
+                !emailOtpSender.isConfigured() ||
+                !smsOtpSender.isConfigured() ||
+                !livenessConfigured) {
+            throw new IllegalStateException(
+                    "Secure registration is temporarily unavailable until government " +
+                    "identity, email, SMS and face verification are configured."
+            );
+        }
+
         String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
         String phone = NigerianPhoneNumber.toLocal(request.getPhone());
         String bvn = request.getBvn().trim();
