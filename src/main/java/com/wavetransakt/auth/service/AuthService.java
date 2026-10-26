@@ -10,6 +10,7 @@ import com.wavetransakt.user.dto.LoginRequest;
 import com.wavetransakt.user.dto.RegisterRequest;
 import com.wavetransakt.user.entity.User;
 import com.wavetransakt.user.repository.UserRepository;
+import com.wavetransakt.verification.service.EmailOtpSender;
 import com.wavetransakt.verification.service.SmsOtpSender;
 import com.wavetransakt.verification.service.VerificationService;
 import com.wavetransakt.wallet.service.WalletService;
@@ -42,6 +43,7 @@ public class AuthService {
     private final WalletService walletService;
     private final VerificationService verificationService;
     private final SmsOtpSender smsOtpSender;
+    private final EmailOtpSender emailOtpSender;
     private final FaceLoginChallengeService faceLoginChallengeService;
     private final DojahGovernmentIdentityClient governmentIdentityClient;
     private final JwtService jwtService;
@@ -52,6 +54,12 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
+        // Never create an uncontactable customer or wallet when outbound
+        // verification mail is not configured. This is a server-side gate,
+        // not just a UI preflight.
+        if (!emailOtpSender.isConfigured()) {
+            throw new IllegalStateException("Email verification delivery is not configured");
+        }
         String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
         String phone = NigerianPhoneNumber.toLocal(request.getPhone());
         String bvn = request.getBvn().trim();
@@ -91,9 +99,10 @@ public class AuthService {
         walletService.createWallet(user);
 
         String verificationCode = verificationService.createEmailVerificationCode(user);
+        emailOtpSender.sendVerificationCode(email, verificationCode);
 
         return AuthResponse.builder()
-                .message("Identity verified. Registration successful. Please verify your email.")
+                .message("Identity verified. A verification code was sent to your email.")
                 .verificationCode(returnVerificationCode ? verificationCode : null)
                 .requiresOtp(false)
                 .faceVerificationRequired(false)
