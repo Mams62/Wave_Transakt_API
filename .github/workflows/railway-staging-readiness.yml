@@ -33,7 +33,19 @@ jobs:
             echo "::error::Registration readiness endpoint not available (HTTP $registration_status)."
             exit 1
           fi
-          echo "PASS: registration availability is reported without submitting identities"
+          for flag in identityProviderConfigured emailDeliveryConfigured smsDeliveryConfigured faceVerificationConfigured; do
+            if ! grep -Eq "\"$flag\"[[:space:]]*:[[:space:]]*(true|false)" "$body"; then
+              echo "::error::Registration readiness missing a required provider status."
+              exit 1
+            fi
+          done
+          # No credentials have been provisioned for Dojah/email/SMS yet:
+          # staging must refuse registration rather than generating false KYC.
+          if ! grep -Eq '"registrationSubmissionAllowed"[[:space:]]*:[[:space:]]*false' "$body"; then
+            echo "::error::Registration unexpectedly enabled without approved provider keys."
+            exit 1
+          fi
+          echo "PASS: government ID, email, SMS and face readiness reported; registration fails closed"
           for path in /api/auth/me /api/wallet; do
             status="$(curl --silent --show-error --connect-timeout 12 --max-time 20 --location \
               --write-out '%{http_code}' --output /dev/null "$base$path")"
