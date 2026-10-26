@@ -1,0 +1,59 @@
+name: Railway Staging Readiness Gate
+on:
+  push:
+    branches: [ops/staging-readonly-preflight-20261026]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  railway-staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify SQL-backed readiness and deny anonymous account access
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://wave-transakt-api-staging-staging-e587.up.railway.app"
+          body="$(mktemp)"
+          trap 'rm -f "$body"' EXIT
+          status="$(curl --silent --show-error --connect-timeout 12 --max-time 60 --location \
+            --write-out '%{http_code}' --output "$body" "$base/api/health/ready")"
+          if [[ "$status" != "200" ]] || ! grep -q '"status":"READY"' "$body"; then
+            echo "::error::Railway staging database readiness failed (HTTP $status)."
+            exit 1
+          fi
+          echo "PASS: Railway staging API and PostgreSQL readiness HTTP 200"
+          # Public preflight must disclose neither credentials nor customer data.
+          registration_status="$(curl --silent --show-error --connect-timeout 12 \
+            --max-time 20 --location --write-out '%{http_code}' \
+            --output "$body" "$base/api/auth/registration/availability")"
+          if [[ "$registration_status" != "200" ]] || \
+             ! grep -Eq '"registrationSubmissionAllowed"[[:space:]]*:[[:space:]]*(true|false)' "$body"; then
+            echo "::error::Registration readiness endpoint not available (HTTP $registration_status)."
+            exit 1
+          fi
+          for flag in identityProviderConfigured emailDeliveryConfigured smsDeliveryConfigured faceVerificationConfigured; do
+            if ! grep -Eq "\"$flag\"[[:space:]]*:[[:space:]]*(true|false)" "$body"; then
+              echo "::error::Registration readiness missing a required provider status."
+              exit 1
+            fi
+          done
+          # No credentials have been provisioned for Dojah/email/SMS yet:
+          # staging must refuse registration rather than generating false KYC.
+          if ! grep -Eq '"registrationSubmissionAllowed"[[:space:]]*:[[:space:]]*false' "$body"; then
+            echo "::error::Registration unexpectedly enabled without approved provider keys."
+            exit 1
+          fi
+          echo "PASS: government ID, email, SMS and face readiness reported; registration fails closed"
+          for path in /api/auth/me /api/wallet; do
+            status="$(curl --silent --show-error --connect-timeout 12 --max-time 20 --location \
+              --write-out '%{http_code}' --output /dev/null "$base$path")"
+            if [[ "$status" != "401" && "$status" != "403" ]]; then
+              echo "::error::Anonymous route $path is not protected (HTTP $status)."
+              exit 1
+            fi
+            echo "PASS: $path blocks unauthenticated requests (HTTP $status)"
+          done
+
+# Recheck after backend identity-preflight deployment (2026-10-26).

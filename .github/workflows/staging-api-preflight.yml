@@ -1,0 +1,53 @@
+name: Read-only Staging API Preflight
+on:
+  push:
+    branches:
+      - ops/staging-readonly-preflight-20261026
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Compare Render and both Railway API gateways safely
+        shell: bash
+        run: |
+          set -uo pipefail
+          overall=0
+          # Selected Railway A is the staging release gate. Render Free may
+          # sleep and Railway B is a separate fallback diagnostic only.
+          primary="https://wave-transakt-api-staging-staging-e587.up.railway.app"
+          for base in \
+            "https://wave-transakt-api-staging.onrender.com" \
+            "https://wave-transakt-api-staging-staging-e587.up.railway.app" \
+            "https://wave-transakt-api-staging-staging.up.railway.app"; do
+            echo "::group::Host: $base"
+            health_body="$(mktemp)"
+            status="$(curl -sS --location --connect-timeout 12 --max-time 70 \
+              -w '%{http_code}' -o "$health_body" "$base/api/health")" || status=000
+            if [[ "$status" == "200" ]] && grep -q '"status":"UP"' "$health_body"; then
+              echo "PASS health: HTTP $status"
+            else
+              echo "::warning::Health was not UP: HTTP $status"
+              if [[ "$base" == "$primary" ]]; then overall=1; fi
+            fi
+            rm -f "$health_body"
+
+            for route in "/api/auth/me" "/api/wallet"; do
+              # Never send customer data, passwords, bearer tokens or identity images.
+              code="$(curl -sS --location --connect-timeout 12 --max-time 25 \
+                -w '%{http_code}' -o /dev/null "$base$route")" || code=000
+              if [[ "$code" == "401" || "$code" == "403" ]]; then
+                echo "PASS protected $route: HTTP $code"
+              else
+                echo "::warning::Unexpected anonymous response on $route: HTTP $code"
+                if [[ "$base" == "$primary" ]]; then overall=1; fi
+              fi
+            done
+            echo "::endgroup::"
+          done
+          exit "$overall"
