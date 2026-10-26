@@ -132,9 +132,15 @@ wave:
       force-update: ${WAVE_ANDROID_FORCE_UPDATE:false}
       release-notes: ${WAVE_ANDROID_RELEASE_NOTES:}
 
+  email:
+    # Resend HTTPS email API. Requires a sender domain verified with the
+    # provider before codes can reach customer addresses. No key in source.
+    api-key: ${WAVE_EMAIL_API_KEY:}
+    from: ${WAVE_EMAIL_FROM:}
+
   sms:
     # Termii-compatible messaging endpoint. BASE URL must come from the SMS
-    # provider dashboard and credentials must stay only in Render.
+    # provider dashboard and credentials stay only in the hosting secret store.
     base-url: ${WAVE_SMS_BASE_URL:}
     api-key: ${WAVE_SMS_API_KEY:}
     sender-id: ${WAVE_SMS_SENDER_ID:WavePay}
