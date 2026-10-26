@@ -58,3 +58,15 @@ P2. Production deployment, domain registration, monitoring, alerting, release si
 - Original-data counts/backup integrity verified; rollback possible.
 - Explicit review approval before merging reference-UI work or deploying backend changes.
 - No "production ready", live funds or banking integration claims without audit evidence.
+
+## October 26 follow-up: connected Railway and Neon evidence
+- Railway has **two** existing `wave-transakt-staging` projects, both with one live `wave-transakt-api-staging` service:
+  - Project `77c5e234-d054-4969-95b5-51c44783741f`; service `5336a6ce-1196-42b9-ac80-88518cfeacee`; public domain `wave-transakt-api-staging-staging-e587.up.railway.app`.
+  - Project `dca9dbea-2b91-4cb5-aabe-c42f49e571f7`; service `ba376a42-da41-4999-9a94-a2ce1c1f9bf8`; public domain `wave-transakt-api-staging-staging.up.railway.app`.
+  - Both deploy the same Oct 12 source commit `2d2cf505434f067727fe59913885557a54b8b2e7` in the US-East `iad` region; no Railway PostgreSQL service or volume is listed in either project.
+  - Both report online, but Hikari logs include repeated `Failed to validate connection (This connection has been closed.)` warnings. Neither has been verified for authenticated login or original-wallet data access. The target database behind their existing `WAVE_DB_URL` environment values has **not** been identified; secrets were not read.
+- Neon connected project `rapid-glitter-03986684`, `wave-transakt-staging-alt`, EU Frankfurt region, has a main database named `wave_transakt_staging` with 32 public tables and 47 successful migrations. **Read-only count query returned zero** users, zero wallets, zero merchants, zero legacy transactions, zero wallet transactions and zero ledger transactions. This is a populated *schema*, not evidence of rescued original financial records.
+- A separate source-only draft PR `fix/staging-postgres-pool-resilience-20261026` adjusts Hikari connection lifetime, idle timeout and small pool sizes via environment overrides. Backend CI passed; **never merge/deploy without approved backup, credential/database reconciliation and release authorization.**
+- Railway has an Amsterdam region `europe-west4-drams3a`; comparing it to US East is appropriate if colocating API with Frankfurt PostgreSQL, but migration/region changes require approval and endpoint tests.
+- Android dark-splash implementation branch: `feat/wave-dark-reference-splash-onboarding-20261026`, review PR #33. This branch adds vector lightning, dark splash/launch gate, welcome/QR-first onboarding, three registration steps, and PIN/OTP login styling. The remaining 18-screen board is not complete; don't merge the older blue/white PR #32 as a substitute.
+- Do not change either Railway project or rewire Android debug base URL to Railway until health probes, login contract checks, DB ownership/records and rollback paths are verified.
