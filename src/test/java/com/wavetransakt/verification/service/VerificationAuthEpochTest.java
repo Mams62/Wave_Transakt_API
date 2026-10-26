@@ -27,6 +27,7 @@ class VerificationAuthEpochTest {
     @Mock VerificationCodeRepository verificationCodeRepository;
     @Mock UserRepository userRepository;
     @Mock PasswordEncoder passwordEncoder;
+    @Mock EmailOtpSender emailOtpSender;
 
     private VerificationService service;
 
@@ -35,7 +36,8 @@ class VerificationAuthEpochTest {
         service = new VerificationService(
                 verificationCodeRepository,
                 userRepository,
-                passwordEncoder
+                passwordEncoder,
+                emailOtpSender
         );
     }
 
