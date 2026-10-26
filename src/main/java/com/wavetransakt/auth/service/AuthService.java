@@ -4,6 +4,7 @@ import com.wavetransakt.auth.dto.AuthResponse;
 import com.wavetransakt.auth.dto.LoginOtpRequest;
 import com.wavetransakt.common.NigerianPhoneNumber;
 import com.wavetransakt.identity.provider.DojahGovernmentIdentityClient;
+import com.wavetransakt.identity.service.LivenessService;
 import com.wavetransakt.security.JwtService;
 import com.wavetransakt.security.ratelimit.RateLimitGuard;
 import com.wavetransakt.user.dto.LoginRequest;
@@ -46,6 +47,7 @@ public class AuthService {
     private final EmailOtpSender emailOtpSender;
     private final FaceLoginChallengeService faceLoginChallengeService;
     private final DojahGovernmentIdentityClient governmentIdentityClient;
+    private final LivenessService livenessService;
     private final JwtService jwtService;
     private final RateLimitGuard rateLimitGuard;
 
@@ -54,11 +56,17 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        // Never create an uncontactable customer or wallet when outbound
-        // verification mail is not configured. This is a server-side gate,
-        // not just a UI preflight.
-        if (!emailOtpSender.isConfigured()) {
-            throw new IllegalStateException("Email verification delivery is not configured");
+        // All required identity and delivery dependencies must be configured
+        // before performing billable BVN/NIN lookups or creating user/wallet
+        // records. The Android preflight is advisory; this is authoritative.
+        if (!governmentIdentityClient.isConfigured() ||
+                !emailOtpSender.isConfigured() ||
+                !smsOtpSender.isConfigured() ||
+                !livenessService.isReadyForEnrollment()) {
+            throw new IllegalStateException(
+                    "Secure account registration is unavailable until government " +
+                    "identity, email, SMS OTP and live-face verification are configured."
+            );
         }
         String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
         String phone = NigerianPhoneNumber.toLocal(request.getPhone());
