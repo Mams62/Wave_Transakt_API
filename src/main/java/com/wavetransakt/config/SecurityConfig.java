@@ -48,6 +48,7 @@ public class SecurityConfig {
                                 "/",
                                 "/error",
                                 "/api/health",
+                                "/api/health/ready",
                                 "/api/app/update"
                         )
                         .permitAll()
