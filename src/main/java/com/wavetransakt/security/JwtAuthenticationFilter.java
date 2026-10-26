@@ -73,9 +73,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 if (JwtService.ACCESS_SETUP_ONLY.equals(access)) {
                     authorities.add(new SimpleGrantedAuthority("ACCESS_SETUP"));
-                } else {
+                } else if (JwtService.ACCESS_FULL.equals(access)) {
                     authorities.add(new SimpleGrantedAuthority("ACCESS_FULL"));
                     authorities.add(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
+                } else {
+                    // Any unexpected signed access claim is invalid, not FULL.
+                    // Fail closed rather than granting permissions by default.
+                    log.debug("Rejected JWT with unknown access scope");
+                    filterChain.doFilter(request, response);
+                    return;
                 }
 
                 UsernamePasswordAuthenticationToken authentication =
