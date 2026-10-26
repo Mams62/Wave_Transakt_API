@@ -15,7 +15,7 @@ import java.time.format.DateTimeParseException;
  * Raw identifiers and provider identity payloads are never returned to Android.
  */
 @Component
-public class DojahGovernmentIdentityClient {
+public class DojahGovernmentIdentityClient implements GovernmentIdentityLookup {
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
@@ -146,12 +146,4 @@ public class DojahGovernmentIdentityClient {
         return slash >= 0 ? value.substring(0, slash) : value;
     }
 
-    public record IdentityRecord(
-            String firstName,
-            String lastName,
-            String middleName,
-            String gender,
-            LocalDate dateOfBirth,
-            String providerReference
-    ) {}
 }
