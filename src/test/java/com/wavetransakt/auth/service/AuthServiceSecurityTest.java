@@ -9,6 +9,7 @@ import com.wavetransakt.user.dto.LoginRequest;
 import com.wavetransakt.user.entity.AccountStatus;
 import com.wavetransakt.user.entity.User;
 import com.wavetransakt.user.repository.UserRepository;
+import com.wavetransakt.verification.service.EmailOtpSender;
 import com.wavetransakt.verification.service.SmsOtpSender;
 import com.wavetransakt.verification.service.VerificationService;
 import com.wavetransakt.wallet.service.WalletService;
@@ -35,6 +36,7 @@ class AuthServiceSecurityTest {
     @Mock WalletService walletService;
     @Mock VerificationService verificationService;
     @Mock SmsOtpSender smsOtpSender;
+    @Mock EmailOtpSender emailOtpSender;
     @Mock FaceLoginChallengeService faceLoginChallengeService;
     @Mock DojahGovernmentIdentityClient governmentIdentityClient;
     @Mock JwtService jwtService;
@@ -239,6 +241,7 @@ class AuthServiceSecurityTest {
                 walletService,
                 verificationService,
                 smsOtpSender,
+                emailOtpSender,
                 faceLoginChallengeService,
                 governmentIdentityClient,
                 jwtService,
