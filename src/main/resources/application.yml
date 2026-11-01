@@ -132,6 +132,15 @@ wave:
     channel: ${WAVE_SMS_CHANNEL:dnd}
 
   identity:
+    # Smile ID v3 async enhanced KYC: SANDBOX ONLY and disabled by default.
+    # Only provider-approved test identifiers may be submitted. No onboarding
+    # or wallet activation is wired to job submission in this draft.
+    smile-id:
+      sandbox-enabled: ${WAVE_SMILE_ID_SANDBOX_ENABLED:false}
+      partner-id: ${WAVE_SMILE_ID_PARTNER_ID:}
+      api-key: ${WAVE_SMILE_ID_API_KEY:}
+      callback-url: ${WAVE_SMILE_ID_CALLBACK_URL:}
+      privacy-policy-url: ${WAVE_SMILE_ID_PRIVACY_POLICY_URL:}
     liveness:
       provider: ${WAVE_LIVENESS_PROVIDER:DOJAH}
       provider-configured: ${WAVE_LIVENESS_PROVIDER_CONFIGURED:false}
