@@ -237,6 +237,7 @@ class AuthServiceSecurityTest {
                 userRepository,
                 passwordEncoder,
                 walletService,
+                org.mockito.Mockito.mock(com.wavetransakt.waveid.WaveIdService.class),
                 verificationService,
                 smsOtpSender,
                 faceLoginChallengeService,

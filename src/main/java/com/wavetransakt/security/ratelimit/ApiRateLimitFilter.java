@@ -131,6 +131,8 @@ public class ApiRateLimitFilter extends OncePerRequestFilter {
                 case "/api/v1/transfers/bank" -> user("BANK_TRANSFER_USER", 10, Duration.ofMinutes(1));
                 case "/api/v1/qr/payment/create" -> user("QR_CREATE_USER", 30, Duration.ofMinutes(1));
                 case "/api/v1/qr/payment/resolve" -> user("QR_RESOLVE_USER", 120, Duration.ofMinutes(1));
+                case "/api/v1/wave-id/resolve" -> user("WAVE_ID_RESOLVE_USER", 20, Duration.ofMinutes(1));
+                case "/api/v1/wave-id/activate" -> user("WAVE_ID_ACTIVATE_USER", 5, Duration.ofHours(1));
                 default -> {
                     if (BANK_REQUERY.matcher(uri).matches() || SERVICE_REQUERY.matcher(uri).matches()) {
                         yield user("PROVIDER_REQUERY_USER", 30, Duration.ofMinutes(1));

@@ -36,6 +36,9 @@ public class User {
     @Column(nullable = false, length = 100)
     private String lastName;
 
+    @Column(name = "wave_id", unique = true, length = 8)
+    private String waveId;
+
     @Column(nullable = false, unique = true, length = 255)
     private String email;
 

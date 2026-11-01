@@ -10,6 +10,7 @@ import com.wavetransakt.user.dto.LoginRequest;
 import com.wavetransakt.user.dto.RegisterRequest;
 import com.wavetransakt.user.entity.User;
 import com.wavetransakt.user.repository.UserRepository;
+import com.wavetransakt.waveid.WaveIdService;
 import com.wavetransakt.verification.service.SmsOtpSender;
 import com.wavetransakt.verification.service.VerificationService;
 import com.wavetransakt.wallet.service.WalletService;
@@ -40,6 +41,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final WalletService walletService;
+    private final WaveIdService waveIdService;
     private final VerificationService verificationService;
     private final SmsOtpSender smsOtpSender;
     private final FaceLoginChallengeService faceLoginChallengeService;
@@ -74,6 +76,8 @@ public class AuthService {
                 .lastName(request.getLastName().trim())
                 .email(email)
                 .phone(phone)
+                // Reserved server-side after verified BVN/NIN matching, never by Android.
+                .waveId(waveIdService.newUnusedWaveId())
                 .password(passwordEncoder.encode(request.getAccountPin()))
                 .bvn(bvn)
                 .nin(nin)

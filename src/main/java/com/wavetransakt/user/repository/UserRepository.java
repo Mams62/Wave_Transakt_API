@@ -28,6 +28,10 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByPhone(String phone);
 
+    boolean existsByWaveId(String waveId);
+
+    Optional<User> findByWaveId(String waveId);
+
     boolean existsByBvn(String bvn);
 
     boolean existsByNin(String nin);
