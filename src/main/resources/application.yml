@@ -107,6 +107,13 @@ vtpass:
   secret-key: ${WAVE_VTPASS_SECRET_KEY:}
 
 wave:
+  bank:
+    wema:
+      # Internal payment SIMULATION ONLY. Not a Wema callback contract.
+      # Never enable during production payments or before bank schema review.
+      sandbox-simulation-enabled: ${WAVE_WEMA_SANDBOX_SIMULATION_ENABLED:false}
+      sandbox-webhook-secret: ${WAVE_WEMA_SANDBOX_WEBHOOK_SECRET:}
+
   demo:
     return-verification-code: ${WAVE_RETURN_VERIFICATION_CODE:false}
 

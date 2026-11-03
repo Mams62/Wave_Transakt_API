@@ -64,6 +64,10 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers("/api/verification/**")
                         .permitAll()
+                        // PUBLIC only for authenticated-by-HMAC internal simulation.
+                        // Gate defaults OFF; this is not a production bank callback.
+                        .requestMatchers("/api/v1/webhooks/wema/simulation")
+                        .permitAll()
                         .requestMatchers("/api/v1/identity/liveness/webhook")
                         .permitAll()
                         // POS devices do not use a customer JWT. Pairing is authorized
