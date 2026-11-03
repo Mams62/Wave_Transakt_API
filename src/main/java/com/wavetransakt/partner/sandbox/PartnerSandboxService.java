@@ -1,6 +1,6 @@
 package com.wavetransakt.partner.sandbox;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
+import java.io.IOException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wavetransakt.transaction.exception.IdempotencyConflictException;
 import org.springframework.data.domain.PageRequest;
@@ -115,7 +115,7 @@ public class PartnerSandboxService {
         CallbackPayload payload;
         try {
             payload = mapper.readValue(body, CallbackPayload.class);
-        } catch (JsonProcessingException ex) {
+        } catch (IOException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid simulation payload");
         }
         if (payload.reference() == null || !payload.reference().matches("SIM-[a-fA-F0-9-]{36}")) {
