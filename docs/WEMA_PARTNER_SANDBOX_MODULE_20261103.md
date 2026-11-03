@@ -46,10 +46,11 @@ wave.bank.wema.sandbox-simulation-enabled=false
 wave.bank.wema.sandbox-webhook-secret=  # ONLY for local simulator; >=32 chars
 ```
 
-Use environment `WAVE_BANK_WEMA_SANDBOX_SIMULATION_ENABLED` only if your config
-maps it to the property; Spring's relaxed binding for custom dotted property
-references varies by source. Explicitly define the dotted property in
-`application.yml` when enabling, not production secrets in Git.
+The application.yml includes explicit environment mappings
+`WAVE_WEMA_SANDBOX_SIMULATION_ENABLED=false` and
+`WAVE_WEMA_SANDBOX_WEBHOOK_SECRET` (empty by default).
+Use them only on an isolated test system; keep secret values out of Git,
+mobile apps, logs and support messages. Neither setting enables real transfers.
 
 This foundation **does not call Wema**. Existing server-side Wema Wallet and
 Transfer clients remain unchanged and still require bank-confirmed products,
