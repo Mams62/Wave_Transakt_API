@@ -1,6 +1,6 @@
 # Render + Neon staging replacement
 
-Prepared 23 November 2026. This is a deployment candidate, not a deployed service.
+Prepared 23 November 2026; deployed and verified 24 November 2026.
 
 Railway rejected a staging redeploy because its trial has expired. The existing
 Java 21 / Spring Boot Docker application can instead be evaluated on a Render
@@ -18,12 +18,44 @@ Free web service using the existing Neon staging project. No paid plan is select
   tables and 47 successful Flyway migration records through version 119. This
   is not an empty database. Migration checksums and application startup still
   require validation against the candidate deployment.
-- Render returned `My Workspace` for `adaullah57@gmail.com`, but requires user
-  confirmation of the workspace before service inventory or deployment access.
-  Existing Render services, quotas, billing settings and database recovery status
-  have not yet been verified.
+- The user confirmed `My Workspace` (`adaullah57@gmail.com`). Render's old free
+  database `dpg-dbedsfnb9u1s739covv0-a` expired on 23 November and is suspended
+  with a billing suspender; it was not deleted or upgraded by this work.
+- The replacement uses the isolated Neon branch `render-staging-20261123`
+  (`br-red-night-b9wotj2d`), leaving the original branch intact.
 
-## Proposed configuration
+## Live verification — 24 November 2026
+
+- Service: `srv-dc2l9pdg1s2s7396vf6g`, on the Free plan in Frankfurt.
+- URL: https://wave-transakt-neon-staging-20261123-8onz.onrender.com
+- Dashboard: https://dashboard.render.com/web/srv-dc2l9pdg1s2s7396vf6g
+- Blueprint: `exs-dc2apl2fngtc73baepl0`; auto-sync and service auto-deploy are off.
+- Deployment: `dep-dc2l9ptg1s2s7396vgd0`, status **live**, finished
+  24 November at 10:15 WAT; deployed commit `faf68ebc00cd4aca0754513181f9b5f55e2a32db`.
+- Flyway validated all 47 migrations, confirmed schema version 119 and applied
+  no new migrations. JPA initialization and application startup succeeded.
+- Initial process startup took approximately 153 seconds. Recorded memory use
+  after startup was approximately 279 MiB within the 512 MiB limit; this is
+  a short startup observation, not a load or endurance test.
+
+| Request | Observed result |
+| --- | --- |
+| `GET /api/health` | HTTP 200, `UP` |
+| `GET /api/health/ready` | HTTP 200, `READY` |
+| `GET /api/auth/me` without credentials | HTTP 401, `UNAUTHORIZED` |
+| `GET /api/auth/registration/availability` | HTTP 200; identity, email, SMS and face verification unconfigured; registration paused |
+
+Registration and provider-backed account flows remain blocked on provider setup.
+No real-money operation or identity submission was attempted. A new Android
+staging preview is being built on `fix/render-neon-staging-20261124`; the offline
+event-demo APK remains available independently.
+
+The Neon project had used about 88.3 of its 100 monthly CU-hours when checked on
+24 November. Remaining compute is limited until the 1 December reset; keep this
+deployment intermittent and do not add keep-alive traffic. Full idle-resume and
+authenticated account flows have not been verified.
+
+## Deployment configuration
 
 Use `render.neon-staging.yaml` as a **new, separate Blueprint** on
 `chore/render-neon-staging-20261123`. Do not replace or synchronize the old
@@ -32,7 +64,7 @@ Confirm that `wave-transakt-neon-staging-20261123` is unused in the chosen
 workspace before applying the new Blueprint, because Render matches resources
 by name. The original services and databases remain available for investigation.
 
-The candidate uses the existing Dockerfile, Frankfurt, port 8080 and the Free
+The service uses the existing Dockerfile, Frankfurt, port 8080 and the Free
 compute plan. Automatic deploys are off. The 256 MB Java heap is a starting point
 for the 512 MB container; native memory, startup time and actual requests must
 be measured before calling the service healthy. Application code is unchanged.
@@ -42,7 +74,7 @@ Deployment verification additionally checks `/api/health/ready`, which performs
 `SELECT 1`. Repeated database probes can keep a free Neon compute awake, so do
 not configure a frequent external keep-alive monitor as a workaround for sleep.
 
-## Database and secrets
+## Database and secrets — reproducible setup
 
 1. Confirm the Render workspace, inspect existing resources and check remaining
    free usage. Do not upgrade plans, delete resources or attach a payment method.
@@ -70,13 +102,13 @@ not configure a frequent external keep-alive monitor as a workaround for sleep.
 changing secrets on an existing service requires an explicit environment update.
 Do not reuse a pre-existing environment group containing production credentials.
 
-## Release checks
+## Release checks — before further rollout
 
 Before changing the normal Android app's API URL:
 
 1. Validate the Blueprint against Render's current schema and platform validator.
    Local schema validation covers structure only; workspace/name/repository
-   permissions and quota checks are pending workspace confirmation.
+   checks also passed during Render's successful first Blueprint plan.
 2. Build and deploy the candidate. Verify Flyway validation/migrations and JPA
    schema validation complete without editing migration history or dropping data.
 3. Confirm `/api/health` and `/api/health/ready` return successful responses,
