@@ -16,8 +16,8 @@ Free web service using the existing Neon staging project. No paid plan is select
   reconnected successfully after it had been archived/idle.
 - Database: `wave_transakt_staging`, approximately 9.6 MB. It contains 32 public
   tables and 47 successful Flyway migration records through version 119. This
-  is not an empty database. Migration checksums and application startup still
-  require validation against the candidate deployment.
+  is not an empty database. The deployed candidate subsequently validated all
+  migration checksums and started successfully, as recorded below.
 - The user confirmed `My Workspace` (`adaullah57@gmail.com`). Render's old free
   database `dpg-dbedsfnb9u1s739covv0-a` expired on 23 November and is suspended
   with a billing suspender; it was not deleted or upgraded by this work.
@@ -46,9 +46,20 @@ Free web service using the existing Neon staging project. No paid plan is select
 | `GET /api/auth/registration/availability` | HTTP 200; identity, email, SMS and face verification unconfigured; registration paused |
 
 Registration and provider-backed account flows remain blocked on provider setup.
-No real-money operation or identity submission was attempted. A new Android
-staging preview is being built on `fix/render-neon-staging-20261124`; the offline
-event-demo APK remains available independently.
+No real-money operation or identity submission was attempted. The Android
+staging preview on `fix/render-neon-staging-20261124` passed its build and unit
+tests in [run 45363997039](https://github.com/Mams62/Wave_Transakt_android/actions/runs/45363997039).
+The [staging-wave-customer-04657c68 prerelease](https://github.com/Mams62/Wave_Transakt_android/releases/tag/staging-wave-customer-04657c68)
+contains the updated APK. Its package ID is `com.example.wavetransakt.neonreview`;
+SHA256 is `2c05513f17efcf21b37c19b5173a489839c4b167c03cc65e01b78eb692253589`.
+The downloaded APK passed archive-integrity checks, matches the published
+release digest and contains the new HTTPS API URL. Physical-phone installation
+and authenticated account flows remain untested. The offline event-demo APK
+remains available independently.
+
+The old Railway service's variable names were inspected without exposing values.
+No identity-provider credentials or email/SMS delivery credentials appeared;
+provider base URLs and feature flags alone do not enable these integrations.
 
 The Neon project had used about 88.3 of its 100 monthly CU-hours when checked on
 24 November. Remaining compute is limited until the 1 December reset; keep this
