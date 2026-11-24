@@ -1,0 +1,69 @@
+# Separate staging candidate. Do not sync over the existing Render Blueprint.
+# Confirm the target workspace and that this name is unused before creating it.
+# See docs/RENDER_NEON_STAGING.md for database isolation and launch checks.
+services:
+  - type: web
+    name: wave-transakt-neon-staging-20261123
+    runtime: docker
+    plan: free
+    region: frankfurt
+    repo: https://github.com/Mams62/Wave_Transakt_API.git
+    branch: chore/render-neon-staging-20261123
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: "off"
+    # Process liveness avoids continuously waking Neon with a database query.
+    # Verify /api/health/ready separately before changing an Android API URL.
+    healthCheckPath: /api/health
+    envVars:
+      # Use an isolated Neon branch. Flyway runs on application startup, so use
+      # a direct (non-pooler) JDBC URL with sslmode=require and no password.
+      # Leave WAVE_DB_HOST unset: the entrypoint would overwrite this URL.
+      - key: WAVE_DB_URL
+        sync: false
+      - key: WAVE_DB_USERNAME
+        sync: false
+      - key: WAVE_DB_PASSWORD
+        sync: false
+      - key: WAVE_JWT_SECRET
+        generateValue: true
+      - key: WAVE_JWT_EXPIRATION
+        value: "86400000"
+      - key: PORT
+        value: "8080"
+      - key: SERVER_ADDRESS
+        value: "0.0.0.0"
+      - key: JAVA_TOOL_OPTIONS
+        value: "-Xms64m -Xmx256m -XX:+UseSerialGC"
+      - key: WAVE_DB_POOL_MAX_SIZE
+        value: "4"
+      - key: WAVE_DB_POOL_MIN_IDLE
+        value: "0"
+      - key: WAVE_SQL_LOGGING
+        value: "false"
+      - key: WAVE_LOG_LEVEL
+        value: "INFO"
+      - key: WAVE_RETURN_VERIFICATION_CODE
+        value: "false"
+      - key: WAVE_RATE_LIMITS_ENABLED
+        value: "true"
+      - key: WAVE_LIVENESS_PROVIDER_CONFIGURED
+        value: "false"
+      - key: WAVE_LEGACY_PAYSTACK_ENABLED
+        value: "false"
+      - key: WAVE_LOCAL_MONEY_MOVEMENT_ENABLED
+        value: "false"
+      - key: WAVE_SERVICE_PAYMENTS_ENABLED
+        value: "false"
+      - key: WAVE_INTERSWITCH_ENABLED
+        value: "false"
+      - key: WAVE_INTERSWITCH_TRANSFER_ENABLED
+        value: "false"
+      - key: WAVE_INTERSWITCH_TRANSFER_PRODUCT_APPROVED
+        value: "false"
+      - key: WAVE_EXTERNAL_BANK_TRANSFER_EXECUTION_ENABLED
+        value: "false"
+      - key: WAVE_INTERSWITCH_ACQUIRING_ENABLED
+        value: "false"
+      - key: WAVE_INTERSWITCH_CARD_ISSUING_ENABLED
+        value: "false"
